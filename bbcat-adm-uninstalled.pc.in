@@ -1,0 +1,10 @@
+prefix=
+exec_prefix=
+libdir=${pcfiledir}/bbcat-adm/
+includedir=${pcfiledir}/
+
+Name: bbcat-adm-@BBCAT_ADM_MAJORMINOR@ uninstalled
+Description: Audio Definition Model handling library
+Version: @VERSION@
+Libs: -L${libdir} -lbbcat-adm-@BBCAT_ADM_MAJORMINOR@
+Cflags: -I${includedir} -I@srcdir@

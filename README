@@ -1,0 +1,77 @@
+Purpose
+
+Audio Definition Model handling library
+
+Dependencies
+
+bbcat-base - git@git0.rd.bbc.co.uk:aplibs/bbcat-base.git
+bbcat-dsp - git@git0.rd.bbc.co.uk:aplibs/bbcat-dsp.git
+
+Files
+
+autogen.sh - simple autotools script
+configure.ac - configure configuration for autotools
+COPYING - information on copying this library
+debian/ - Debian control and version information
+doxygen.am - Doxygen automake file
+doxygen.cfg - Doxygen configuration
+m4 - folder for autotools
+Makefile.am - makefile for automake
+README - this file
+src/ - source folder containing C/C++ source and header files
+
+src/ADMData.cpp                         | Base class for ADM data handlers
+src/ADMData.h                           |
+
+src/ADMObjects.cpp                      | Individual component ADM objects
+src/ADMObjects.h                        |
+
+src/Makefile.am                         | Makefile for automake
+
+src/ADMXMLGenerator.cpp					| A simple XML generator for ADM data
+src/ADMXMLGenerator.h					|
+
+src/AudioObjectCursor.h                 | A cursor that tracks channel parameter changes over time 
+
+src/AudioObjectParameters.cpp           | A set of parameters describing a channel's audio attributes (such as position, size, diffuseness, gain and importance)
+src/AudioObjectParameters.h             |
+
+src/XMLValue.cpp						| A simple XML value/attribute/value with attribute class
+src/XMLValue.h							|
+
+--------------------------------------------------------------------------------
+Building on Windows (Visual Studio)
+
+Download and install CMake (https://cmake.org/download/) *first*
+Download and install git (https://git-scm.com/download/win)
+
+Use git-bash to change to the directory where the libraries are to be cloned to
+
+Clone source code, if necessary:
+git clone git@github.com:bbcrd/bbcat-adm.git
+
+cd bbcat-adm
+mkdir build
+cd build
+cmake -G "Visual Studio 14 2015 Win64" .. && cmake --build . --target INSTALL --config Release
+(or whatever version of Visual Studio you are using)
+
+Notes on Windows builds
+
+As there is no standardised directories for cmake files, libraries, etc. the build *assumes* that:
+1. Library includes, libs and shared files will be stored in c:\local\bbcat
+2. CMake configuration files will be stored in c:\local\cmake
+3. http://sourceforge.net/projects/pthreads4w/ has been downloaded and extracted to c:\local\pthreads (rename unzip folder to 'pthreads')
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+Building on Mac and Linux
+
+There are two build mechanisms supported: autotools and cmake
+
+autotools:
+./autogen.sh && configure && make && sudo make install
+
+cmake:
+mkdir build ; cd build ; cmake .. && make && sudo make install
+--------------------------------------------------------------------------------

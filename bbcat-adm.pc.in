@@ -1,0 +1,13 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@/bbcat-adm-@BBCAT_ADM_MAJORMINOR@
+toolsdir=${exec_prefix}/bin
+
+
+Name: bbcat-adm-@BBCAT_ADM_MAJORMINOR@
+Description: Audio Definition Model handling library
+Requires.private: @BBCAT_ADM_PKG_DEPS@
+Version: @VERSION@
+Libs: -L${libdir} -lbbcat-adm-@BBCAT_ADM_MAJORMINOR@
+Cflags: -I${includedir} @BBCAT_GLOBAL_ADM_CFLAGS@

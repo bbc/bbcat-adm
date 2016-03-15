@@ -1,0 +1,5 @@
+bbcat-adm (0.1.2.1) quantal; urgency=low
+
+  * Moved bbcat-audioobjects library to bbcat-adm to better represent its purpose
+
+ -- Richard Day <richard.day@bbc.co.uk>  Mon, 07 Mar 2016 14:50:00 +0000
