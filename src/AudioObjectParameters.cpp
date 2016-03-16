@@ -584,13 +584,18 @@ void AudioObjectParameters::GetOverrideableParameterDescriptions(std::vector<con
 /*--------------------------------------------------------------------------------*/
 bool AudioObjectParameters::GetJumpPosition(bool& jumpPosition, double *interpolationLength) const
 {
-  bool valid = GetInterpolate(jumpPosition);
+  bool interpolate = false;
+  bool valid = GetInterpolate(interpolate);
   if (valid)
   {
-    jumpPosition &= (GetInterpolationTime() != GetDuration());
-    if (interpolationLength) *interpolationLength = jumpPosition ? GetInterpolationTimeS() : 0.0;
+    jumpPosition = (!interpolate || (interpolate && (GetInterpolationTime() != GetDuration())));
+    if (interpolationLength) *interpolationLength = interpolate ? GetInterpolationTimeS() : 0.0;
   }
-  else if (interpolationLength) *interpolationLength = 0.0;
+  else
+  {
+    jumpPosition = false;
+    if (interpolationLength) *interpolationLength = 0.0;
+  }
   
   BBCDEBUG3(("GetJumpPosition(): %s/%s -> %s/%s",
              StringFrom(GetInterpolate()).c_str(),

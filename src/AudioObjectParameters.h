@@ -33,8 +33,8 @@ BBC_AUDIOTOOLBOX_START
  * interpolate       = (interpolationtime > 0)
  *
  * And the other way:
- * jumpPosition        = (interpolate && (interpolationtime != duration))
- * interpolationLength = jumpPosition ? interpolationtime : <notset>
+ * jumpPosition        = !interpolate || (interpolate && (interpolationtime != duration))
+ * interpolationLength = interpolate ? interpolationtime : 0
  */
 /*--------------------------------------------------------------------------------*/
 class ADMAudioObject;

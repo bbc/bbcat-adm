@@ -2511,42 +2511,36 @@ void ADMTrackCursor::SetObjectParameters(const AudioObjectParameters& newparamet
   {
     AUDIOOBJECT&                        objectdata   = objectlist[objectindex];
     std::vector<ADMAudioBlockFormat *>& blockformats = objectdata.channelformat->GetBlockFormatRefs();
+    ADMAudioBlockFormat                 *blockformat;
+    ADMAudioObject                      *audioobject;
+    uint64_t                            relativetime = currenttime - objectdata.audioobject->GetStartTime();
 
-    // decide whether a new blockformat is required
-    if (!objparametersvalid              || // if no existing entries; or
-        (newparameters != objparameters))   // if parameters have changed
+    // update internal parameters
+    objparameters      = newparameters;
+    objparametersvalid = true;
+
+    if ((blockindex < blockformats.size()) && (blockformats[blockindex]->GetStartTime() == relativetime))
     {
-      ADMAudioBlockFormat *blockformat;
-      ADMAudioObject      *audioobject;
-      uint64_t            relativetime = currenttime - objectdata.audioobject->GetStartTime();
+      // new position at same time as original -> just update the parameters
+      blockformats[blockindex]->GetObjectParameters() = objparameters;
+      BBCDEBUG2(("Updating channel %u to {'%s'}", channel, blockformats[blockindex]->GetObjectParameters().ToString().c_str()));
+    }
+    else
+    {
+      // new position requires new block format
+      EndBlockFormat(currenttime);
 
-      // update internal parameters
-      objparameters      = newparameters;
-      objparametersvalid = true;
-
-      if ((blockindex < blockformats.size()) && (blockformats[blockindex]->GetStartTime() == relativetime))
+      if ((blockformat = StartBlockFormat(currenttime)) != NULL)
       {
-        // new position at same time as original -> just update the parameters
-        blockformats[blockindex]->GetObjectParameters() = objparameters;
+        blockformat->GetObjectParameters() = objparameters;
         BBCDEBUG2(("Updating channel %u to {'%s'}", channel, blockformats[blockindex]->GetObjectParameters().ToString().c_str()));
       }
-      else
-      {
-        // new position requires new block format
-        EndBlockFormat(currenttime);
+    }
 
-        if ((blockformat = StartBlockFormat(currenttime)) != NULL)
-        {
-          blockformat->GetObjectParameters() = objparameters;
-          BBCDEBUG2(("Updating channel %u to {'%s'}", channel, blockformats[blockindex]->GetObjectParameters().ToString().c_str()));
-        }
-      }
-
-      // update parameters of ADMAudioObject from AudioObjectParameters object
-      if (objectdata.audioobject && ((audioobject = const_cast<ADMAudioObject *>(objectdata.audioobject)) != NULL))
-      {
-        audioobject->UpdateAudioObject(objparameters);
-      }
+    // update parameters of ADMAudioObject from AudioObjectParameters object
+    if (objectdata.audioobject && ((audioobject = const_cast<ADMAudioObject *>(objectdata.audioobject)) != NULL))
+    {
+      audioobject->UpdateAudioObject(objparameters);
     }
   }
 }
