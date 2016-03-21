@@ -31,14 +31,10 @@ pkginclude_HEADERS =							\
 	ADMXMLGenerator.h							\
 	AudioObjectCursor.h							\
 	AudioObjectParameters.h						\
-	SelfRegisteringObjects.h					\
 	XMLValue.h									\
 	version.h
 
-CLEANFILES = version.h version.cpp SelfRegisteringObjects.h
-
-SelfRegisteringObjects.h: $(libbbcat_adm_@BBCAT_ADM_MAJORMINOR@_la_SOURCES) Makefile Makefile.am
-	@./findselfregisteringobjects.sh @PACKAGE@ $@ $(libbbcat_adm_@BBCAT_ADM_MAJORMINOR@_la_SOURCES)
+CLEANFILES = version.h version.cpp
 
 noinst_HEADERS =
 
