@@ -1,7 +1,6 @@
 #ifndef __AUDIO_OBJECT_CURSOR__
 #define __AUDIO_OBJECT_CURSOR__
 
-//PUBLIBS:#include "AudioObject.h"
 #include "AudioObjectParameters.h"
 
 BBC_AUDIOTOOLBOX_START

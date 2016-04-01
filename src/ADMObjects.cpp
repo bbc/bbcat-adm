@@ -575,7 +575,6 @@ const std::string ADMAudioObject::IDPrefix  = "AO_";
 /*--------------------------------------------------------------------------------*/
 ADMAudioObject::ADMAudioObject(ADMData& _owner, const std::string& _id, const std::string& _name) :
   ADMObject(_owner, _id, _name),
-  //PUBLIBS:AudioObject(),
   startTime(0),
   duration(0),
   starttrack(0),
@@ -592,7 +591,6 @@ ADMAudioObject::ADMAudioObject(ADMData& _owner, const std::string& _id, const st
 
 ADMAudioObject::ADMAudioObject(ADMData& _owner, const ADMAudioObject *obj) :
   ADMObject(_owner, obj),
-  //PUBLIBS:AudioObject(),
   startTime(obj->startTime),
   duration(obj->duration),
   starttrack(obj->starttrack),
@@ -2620,7 +2618,7 @@ bool ADMTrackCursor::Seek(uint64_t t)
 
     if ((objectindex != oldobjectindex) || (blockindex != oldblockindex))
     {
-      BBCDEBUG4(("Cursor<%s:%u>: Moved to object %u/%u, block %u/%u at %0.3lfs (parameters '%s')", StringFrom(this).c_str(), channel, objectindex, (uint_t)objectlist.size(), blockindex, (uint_t)objectlist[objectindex].channelformat->GetBlockFormatRefs().size(), (double)t * 1.0e-9, objectlist[objectindex].channelformat->GetBlockFormatRefs()[blockindex]->GetObjectParameters().ToString().c_str()));
+      BBCDEBUG4(("Cursor<%s:%u>: Moved to object %u/%u, block %u/%u at %s (parameters '%s')", StringFrom(this).c_str(), channel, objectindex, (uint_t)objectlist.size(), blockindex, (uint_t)objectlist[objectindex].channelformat->GetBlockFormatRefs().size(), GenerateTime(t).c_str(), objectlist[objectindex].channelformat->GetBlockFormatRefs()[blockindex]->GetObjectParameters().ToString().c_str()));
     }
   }
 
