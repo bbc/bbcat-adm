@@ -15,22 +15,21 @@ TEST_CASE("create_and_delete")
 TEST_CASE("comparison")
 {
   AudioObjectParameters aop1, aop2;
+#if ENABLE_JSON
   JSONValue obj1, obj2;
+#endif
+  
+  CHECK(aop1 == aop2);
+  CHECK(aop1.ToString() == aop2.ToString());
 
+#if ENABLE_JSON
   obj1 = aop1.ToJSON(); 
   obj2 = aop2.ToJSON();
 
-  printf("%u: Checking: %s == %s\n", __LINE__, aop1.ToJSONString().c_str(), aop2.ToJSONString().c_str());
-
-  CHECK(aop1 == aop2);
-  CHECK(aop1.ToString() == aop2.ToString());
   CHECK(obj1 == obj2);
-
-  printf("%u: Checking: %s == %s\n", __LINE__, AudioObjectParameters().FromJSONEx(aop1.ToJSON()).ToJSONString().c_str(), aop1.ToJSONString().c_str());
   CHECK(AudioObjectParameters().FromJSONEx(aop1.ToJSON()) == aop1);
-
-  printf("%u: Checking: %s == %s\n", __LINE__, AudioObjectParameters().FromJSONEx(aop2.ToJSON()).ToJSONString().c_str(), aop2.ToJSONString().c_str());
   CHECK(AudioObjectParameters().FromJSONEx(aop2.ToJSON()) == aop2);
+#endif
 
   aop1.SetCartesian(true);
   aop1.SetPosition(Position(5, 6, 7));
@@ -60,49 +59,53 @@ TEST_CASE("comparison")
   aop1.AddExcludedZone("zone2", -2.0, -3.0, -1.0, 1.0, 2.0, 3.0);
   ParameterSet othervalues = aop1.GetOtherValues();
   aop1.SetOtherValues(othervalues.Set("other1", 1).Set("other2", "2"));
-  obj1 = aop1.ToJSON();
 
-  printf("%u: Checking: %s != %s\n", __LINE__, aop1.ToJSONString().c_str(), aop2.ToJSONString().c_str());
-  
   CHECK(aop1 != aop2);
   CHECK(aop1.ToString() != aop2.ToString());
+
+#if ENABLE_JSON
+  obj1 = aop1.ToJSON();
   CHECK(obj1 != obj2);
   CHECK(AudioObjectParameters().FromJSONEx(aop1.ToJSON()) == aop1);
   CHECK(AudioObjectParameters().FromJSONEx(aop2.ToJSON()) == aop2);
+#endif
 
   aop2 = aop1;
-  obj2 = aop2.ToJSON();
-
-  printf("%u: Checking: %s == %s\n", __LINE__, aop1.ToJSONString().c_str(), aop2.ToJSONString().c_str());
-
   CHECK(aop1 == aop2);
   CHECK(aop1.ToString() == aop2.ToString());
+
+#if ENABLE_JSON
+  obj2 = aop2.ToJSON();
   CHECK(obj1 == obj2);
   CHECK(AudioObjectParameters().FromJSONEx(aop1.ToJSON()) == aop1);
   CHECK(AudioObjectParameters().FromJSONEx(aop2.ToJSON()) == aop2);
-
+#endif
+  
   aop2 = AudioObjectParameters();
-  obj2 = aop2.ToJSON();
-
-  printf("%u: Checking: %s != %s\n", __LINE__, aop1.ToJSONString().c_str(), aop2.ToJSONString().c_str());
-
   CHECK(aop1 != aop2);
   CHECK(aop1.ToString() != aop2.ToString());
+
+#if ENABLE_JSON
+  obj2 = aop2.ToJSON();
   CHECK(obj1 != obj2);
   CHECK(AudioObjectParameters().FromJSONEx(aop1.ToJSON()) == aop1);
   CHECK(AudioObjectParameters().FromJSONEx(aop2.ToJSON()) == aop2);
-
+  
   aop2.FromJSONEx(obj1);
   obj2 = aop2.ToJSON();
-
-  printf("%u: Checking: %s == %s\n", __LINE__, aop1.ToJSONString().c_str(), aop2.ToJSONString().c_str());
+#else
+  aop2 = aop1;
+#endif
 
   CHECK(aop1 == aop2);
   CHECK(aop1.ToString() == aop2.ToString());
+
+#if ENABLE_JSON
   CHECK(obj1 == obj2);
   CHECK(AudioObjectParameters().FromJSONEx(aop1.ToJSON()) == aop1);
   CHECK(AudioObjectParameters().FromJSONEx(aop2.ToJSON()) == aop2);
-
+#endif
+  
   aop1.ResetCartesian();
   aop1.ResetPosition();
   aop1.ResetMinPosition();
@@ -129,16 +132,17 @@ TEST_CASE("comparison")
   aop1.ResetDisableDucking();
   aop1.ResetExcludedZones();
   aop1.ResetOtherValues();
-  obj1 = aop1.ToJSON();
 
   aop2 = AudioObjectParameters();
-  obj2 = aop2.ToJSON();
-
-  printf("%u: Checking: %s == %s\n", __LINE__, aop1.ToJSONString().c_str(), aop2.ToJSONString().c_str());
-
   CHECK(aop1 == aop2);
   CHECK(aop1.ToString() == aop2.ToString());
+
+#if ENABLE_JSON
+  obj1 = aop1.ToJSON();
+  obj2 = aop2.ToJSON();
+
   CHECK(obj1 == obj2);
   CHECK(AudioObjectParameters().FromJSONEx(aop1.ToJSON()) == aop1);
   CHECK(AudioObjectParameters().FromJSONEx(aop2.ToJSON()) == aop2);
+#endif
 }
