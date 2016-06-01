@@ -9,5 +9,5 @@ Name: bbcat-adm-@BBCAT_ADM_MAJORMINOR@
 Description: Audio Definition Model handling library
 Requires.private: @BBCAT_ADM_PKG_DEPS@
 Version: @VERSION@
-Libs: -L${libdir} -lbbcat-adm-@BBCAT_ADM_MAJORMINOR@
+Libs: -L${libdir} -lbbcat-adm-@BBCAT_ADM_MAJORMINOR@ @BBCAT_GLOBAL_ADM_LIBS@
 Cflags: -I${includedir} @BBCAT_GLOBAL_ADM_CFLAGS@

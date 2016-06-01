@@ -3,17 +3,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define BBCDEBUG_LEVEL 1
 #include "XMLValue.h"
 
 BBC_AUDIOTOOLBOX_START
 
-XMLValue::XMLValue() : attr(false),
-                       subvalues(NULL)
+XMLValue::XMLValue() : subvalues(NULL)
 {
 }
 
-XMLValue::XMLValue(const XMLValue& obj) : attr(false),
-                                          subvalues(NULL)
+XMLValue::XMLValue(const XMLValue& obj) : subvalues(NULL)
 {
   operator = (obj);
 }
@@ -29,7 +28,6 @@ XMLValue::~XMLValue()
 /*--------------------------------------------------------------------------------*/
 XMLValue& XMLValue::operator = (const XMLValue& obj)
 {
-  attr  = obj.attr;
   name  = obj.name;
   value = obj.value;
   attrs = obj.attrs;
@@ -80,12 +78,6 @@ void XMLValue::AddSubValues(const XMLValues& _subvalues)
       }
     }
   }
-  // delete existing list of sub values
-  else if (subvalues)
-  {
-    delete subvalues;
-    subvalues = NULL;
-  }
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -99,47 +91,55 @@ void XMLValue::AddSubValue(const XMLValue& _subvalue)
 }
 
 /*--------------------------------------------------------------------------------*/
+/** Add a single sub value to the list (if set or forced)
+ */
+/*--------------------------------------------------------------------------------*/
+void XMLValue::AddSubValue(const INamedParameter& _parameter, bool force)
+{
+  if (force || _parameter.IsSet())
+  {
+    XMLValue subvalue;
+    subvalue.SetValue(_parameter, force);
+    AddSubValue(subvalue);
+  }
+}
+
+/*--------------------------------------------------------------------------------*/
+/** Set attribute from NamedParameter, if set (or forced)
+ */
+/*--------------------------------------------------------------------------------*/
+void XMLValue::SetAttribute(const INamedParameter& _parameter, bool force)
+{
+  if (force || _parameter.IsSet()) SetValueOrAttribute(_parameter.GetName(), _parameter.ToString(), true);
+}
+
+/*--------------------------------------------------------------------------------*/
 /** Set XMLValue object as a XML value (name/value pair) with optional attributes
  */
 /*--------------------------------------------------------------------------------*/
 void XMLValue::SetValueOrAttribute(const std::string& _name, const std::string& _value, bool _attr)
 {
-  attr  = _attr;
-  name  = _name;
-  value = _value;
-  attrs.clear();
+  if (_attr) attrs[_name] = _value;
+  else
+  {
+    name  = _name;
+    value = _value;
+  }
 }
 
 void XMLValue::SetValueOrAttribute(const std::string& _name, const char *_value, bool _attr)
 {
-  attr  = _attr;
-  name  = _name;
-  value = _value;
-  attrs.clear();
+  if (_attr) attrs[_name] = _value;
+  else
+  {
+    name  = _name;
+    value = _value;
+  }
 }
 
-void XMLValue::SetValueOrAttribute(const std::string& _name, uint64_t _value, bool _attr)
+void XMLValue::SetTimeValueOrAttribute(const std::string& _name, uint64_t _value, bool _attr)
 {
   SetValueOrAttribute(_name, GenerateTime(_value), _attr);
-}
-
-/*--------------------------------------------------------------------------------*/
-/** Set attribute of XMLValue value object (initialised above)
- */
-/*--------------------------------------------------------------------------------*/
-void XMLValue::SetValueAttribute(const std::string& _name, const std::string& _value)
-{
-  attrs[_name] = _value;
-}
-
-void XMLValue::SetValueAttribute(const std::string& _name, const char *_value)
-{
-  attrs[_name] = _value;
-}
-
-void XMLValue::SetValueAttribute(const std::string& _name, uint64_t _value)
-{
-  attrs[_name] = GenerateTime(_value);
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -159,6 +159,62 @@ const std::string *XMLValue::GetAttribute(const std::string& _name) const
   return attr;
 }
 
+/*--------------------------------------------------------------------------------*/
+/** Erase attribute
+ */
+/*--------------------------------------------------------------------------------*/
+bool XMLValue::EraseAttribute(const std::string& _name)
+{
+  ATTRS::iterator it;
+  bool success = false;
+  
+  if ((it = attrs.find(_name)) != attrs.end())
+  {
+    attrs.erase(it);
+    success = true;
+  }
+
+  return success;
+}
+
+/*--------------------------------------------------------------------------------*/
+/** Set a NamedParameter from an attribute
+ *
+ * @note if the attribute is found, it is ERASED from the list
+ */
+/*--------------------------------------------------------------------------------*/
+bool XMLValue::GetAttributeAndErase(INamedParameter& val)
+{
+  ATTRS::iterator it;
+  bool success = false;
+
+  if ((it = attrs.find(val.GetName())) != attrs.end())
+  {
+    success = val.FromString(it->second);
+    BBCDEBUG5(("%s<%s>: Converted '%s' to '%s'", val.GetName(), StringFrom(&val).c_str(), it->second.c_str(), val.ToString().c_str()));
+    
+    // erase attribute from list
+    attrs.erase(it);
+  }
+  else BBCDEBUG4(("%s<%s>: Attribute not found!", val.GetName(), StringFrom(&val).c_str()));
+  
+  return success;
+}
+
+/*--------------------------------------------------------------------------------*/
+/** Return whether this object is 'empty'
+ *
+ * 'empty' means:
+ * 1. no value
+ * 2. no attributes
+ * 3. no subvalues (or 0-length list)
+ */
+/*--------------------------------------------------------------------------------*/
+bool XMLValue::Empty() const
+{
+  return value.empty() && !HasAttributes() && (!subvalues || !subvalues->size());
+}
+
 /*----------------------------------------------------------------------------------------------------*/
 
 /*--------------------------------------------------------------------------------*/
@@ -171,10 +227,30 @@ void XMLValues::AddValue(const XMLValue& value)
 }
 
 /*--------------------------------------------------------------------------------*/
-/** Return ptr to value with specified name or NULL
+/** Set value from NamedParameter
  */
 /*--------------------------------------------------------------------------------*/
-const XMLValue* XMLValues::GetValue(const std::string& name) const
+bool XMLValues::AddValue(const INamedParameter& parameter, bool force)
+{
+  bool added = false;
+  
+  if (force || parameter.IsSet())
+  {
+    XMLValue value;
+    value.SetValue(parameter, force);
+    AddValue(value);
+  }
+
+  return added;
+}
+
+/*--------------------------------------------------------------------------------*/
+/** Return ptr to value with specified name or NULL
+ *
+ * @note index represents the index'th entry OF THE SPECIFIED NAME and therefore should start at 0 and increment by 1
+ */
+/*--------------------------------------------------------------------------------*/
+const XMLValue* XMLValues::GetValue(const std::string& name, uint_t index) const
 {
   const XMLValue *value = NULL;
   uint_t i;
@@ -185,12 +261,49 @@ const XMLValue* XMLValues::GetValue(const std::string& name) const
   {
     if (operator[](i).name == name)
     {
-      value = &operator[](i);
-      break;
+      // find indexed copy
+      if (index) index--;
+      else
+      {
+        value = &operator[](i);
+        break;
+      }
     }
   }
 
-  if (!value) BBCDEBUG4(("No value named '%s'!", name.c_str()));
+  if (!value) BBCDEBUG4(("No value named '%s' index %u!", name.c_str(), index));
+
+  return value;
+}
+
+/*--------------------------------------------------------------------------------*/
+/** Return ptr to value with specified name or NULL
+ *
+ * @note index represents the index'th entry OF THE SPECIFIED NAME and therefore should start at 0 and increment by 1
+ */
+/*--------------------------------------------------------------------------------*/
+XMLValue* XMLValues::GetValueWritable(const std::string& name, uint_t index)
+{
+  XMLValue *value = NULL;
+  uint_t i;
+
+  // simple search and compare
+  // (MUST use a list because there can be MULTIPLE values of the same name)
+  for (i = 0; i < size(); i++)
+  {
+    if (operator[](i).name == name)
+    {
+      // find indexed copy
+      if (index) index--;
+      else
+      {
+        value = &operator[](i);
+        break;
+      }
+    }
+  }
+
+  if (!value) BBCDEBUG4(("No value named '%s' index %u!", name.c_str(), index));
 
   return value;
 }
@@ -231,7 +344,7 @@ void XMLValues::EraseValue(const XMLValue *value)
  * @note the value, if found, is REMOVED from the list
  */
 /*--------------------------------------------------------------------------------*/
-bool XMLValues::SetValue(std::string& res, const std::string& name)
+bool XMLValues::GetValueAndErase(std::string& res, const std::string& name)
 {
   const XMLValue *value;
   bool success = false;
@@ -257,7 +370,7 @@ bool XMLValues::SetValue(std::string& res, const std::string& name)
  * @note the value, if found, is REMOVED from the list
  */
 /*--------------------------------------------------------------------------------*/
-bool XMLValues::SetValue(double& res, const std::string& name)
+bool XMLValues::GetValueAndErase(double& res, const std::string& name)
 {
   const XMLValue *value;
   bool success = false;
@@ -283,7 +396,7 @@ bool XMLValues::SetValue(double& res, const std::string& name)
  * @note the value, if found, is REMOVED from the list
  */
 /*--------------------------------------------------------------------------------*/
-bool XMLValues::SetValue(uint_t& res, const std::string& name, bool hex)
+bool XMLValues::GetValueAndErase(uint_t& res, const std::string& name, bool hex)
 {
   const XMLValue *value;
   bool success = false;
@@ -310,7 +423,7 @@ bool XMLValues::SetValue(uint_t& res, const std::string& name, bool hex)
  * @note the value, if found, is REMOVED from the list
  */
 /*--------------------------------------------------------------------------------*/
-bool XMLValues::SetValue(ulong_t& res, const std::string& name, bool hex)
+bool XMLValues::GetValueAndErase(ulong_t& res, const std::string& name, bool hex)
 {
   const XMLValue *value;
   bool success = false;
@@ -337,7 +450,7 @@ bool XMLValues::SetValue(ulong_t& res, const std::string& name, bool hex)
  * @note the value, if found, is REMOVED from the list
  */
 /*--------------------------------------------------------------------------------*/
-bool XMLValues::SetValue(sint_t& res, const std::string& name, bool hex)
+bool XMLValues::GetValueAndErase(sint_t& res, const std::string& name, bool hex)
 {
   const XMLValue *value;
   bool success = false;
@@ -364,7 +477,7 @@ bool XMLValues::SetValue(sint_t& res, const std::string& name, bool hex)
  * @note the value, if found, is REMOVED from the list
  */
 /*--------------------------------------------------------------------------------*/
-bool XMLValues::SetValue(slong_t& res, const std::string& name, bool hex)
+bool XMLValues::GetValueAndErase(slong_t& res, const std::string& name, bool hex)
 {
   const XMLValue *value;
   bool success = false;
@@ -390,7 +503,7 @@ bool XMLValues::SetValue(slong_t& res, const std::string& name, bool hex)
  * @note the value, if found, is REMOVED from the list
  */
 /*--------------------------------------------------------------------------------*/
-bool XMLValues::SetValue(bool& res, const std::string& name)
+bool XMLValues::GetValueAndErase(bool& res, const std::string& name)
 {
   const XMLValue *value;
   bool success = false;
@@ -416,7 +529,7 @@ bool XMLValues::SetValue(bool& res, const std::string& name)
  * @note the value, if found, is REMOVED from the list
  */
 /*--------------------------------------------------------------------------------*/
-bool XMLValues::SetValueTime(uint64_t& res, const std::string& name)
+bool XMLValues::GetTimeValueAndErase(uint64_t& res, const std::string& name)
 {
   const XMLValue *value;
   bool success = false;
@@ -430,5 +543,24 @@ bool XMLValues::SetValueTime(uint64_t& res, const std::string& name)
   return success;
 }
 
+/*--------------------------------------------------------------------------------*/
+/** Set NamedParameter from value
+ *
+ * @note the value, if found, is REMOVED from the list
+ */
+/*--------------------------------------------------------------------------------*/
+bool XMLValues::GetValueAndErase(INamedParameter& parameter)
+{
+  const XMLValue *value;
+  bool success = false;
+
+  if ((value = GetValue(parameter.GetName())) != NULL)
+  {
+    success = parameter.FromString(value->value);
+    EraseValue(value);
+  }
+
+  return success;
+}
 
 BBC_AUDIOTOOLBOX_END

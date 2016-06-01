@@ -46,7 +46,7 @@ namespace ADMXMLGenerator
     str = SearchAndReplace(str, "'",  "&apos;");
     return str;
   }
-  
+
   /*--------------------------------------------------------------------------------*/
   /** Append string to XML context
    *
@@ -62,11 +62,11 @@ namespace ADMXMLGenerator
       if      (xml.destination.str) *xml.destination.str += str;
       else if (xml.destination.buf &&
                ((xml.length + str.length()) <= xml.destination.buflen)) strcpy(xml.destination.buf + xml.length, str.c_str());
-  
+
       // update length
       xml.length += str.length();
 
-      // update flag to indicate whether buffer ends with an eol 
+      // update flag to indicate whether buffer ends with an eol
       xml.eollast = (xml.eol.length() && (str.length() >= xml.eol.length()) && (str.substr(str.length() - xml.eol.length()) == xml.eol));
     }
   }
@@ -122,12 +122,12 @@ namespace ADMXMLGenerator
            name.c_str());
 
     AppendXML(xml, str);
-  
+
     // stack this object name (for closing)
     xml.stack.push_back(name);
     xml.opened = true;
   }
-  
+
   /*--------------------------------------------------------------------------------*/
   /** Add an attribute to the current XML object
    *
@@ -199,24 +199,18 @@ namespace ADMXMLGenerator
   /** Add attributes from list of XML values to current object header
    *
    * @param xml user supplied argument representing context data
-   * @param values list of XML values
+   * @param value an XMLValue containing attributes
    *
    * @note for other XML implementaions, this function MUST be overridden
    */
   /*--------------------------------------------------------------------------------*/
-  void AddXMLAttributes(TEXTXML& xml, const XMLValues& values)
+  void AddXMLAttributes(TEXTXML& xml, const XMLValue& value)
   {
-    uint_t i;
-  
-    // output attributes
-    for (i = 0; i < values.size(); i++)
-    {
-      const XMLValue& value = values[i];
+    XMLValue::ATTRS::const_iterator it;
 
-      if (value.attr)
-      {
-        AddXMLAttribute(xml, value.name, value.value);
-      }
+    for (it = value.attrs.begin(); it != value.attrs.end(); ++it)
+    {
+      AddXMLAttribute(xml, it->first, it->second);
     }
   }
 
@@ -232,23 +226,20 @@ namespace ADMXMLGenerator
   void AddXMLValues(TEXTXML& xml, const XMLValues& values)
   {
     uint_t i;
-  
+
     // output values
     for (i = 0; i < values.size(); i++)
     {
       const XMLValue& value = values[i];
 
-      if (!value.attr)
+      // only add XML values with a name
+      if (!value.name.empty())
       {
-        XMLValue::ATTRS::const_iterator it;
         const XMLValues *subvalues;
-        
+
         OpenXMLObject(xml, value.name);
 
-        for (it = value.attrs.begin(); it != value.attrs.end(); ++it)
-        {
-          AddXMLAttribute(xml, it->first, it->second);
-        }
+        AddXMLAttributes(xml, value);
 
         // if value has sub-values, output those
         if ((subvalues = value.GetSubValues()) != NULL) AddXMLValues(xml, *subvalues);
@@ -305,27 +296,29 @@ namespace ADMXMLGenerator
 
       // if object has contained objects, it cannot be empty
       emptyobject &= (obj->GetContainedObjectCount() == 0);
-    
+
       // test to see if this object is 'empty'
       for (i = 0; emptyobject && (i < values.size()); i++)
       {
-        emptyobject &= !(!values[i].attr);                            // if any values (non-attribute) found, object cannot be empty
+        emptyobject &= !values[i].HasAttributes();                          // if any values have attributes, object cannot be empty
       }
       for (i = 0; emptyobject && (i < objects.size()); i++)
       {
-        emptyobject &= !objects[i].genref;                            // if any references to be generated, object cannot be empty
+        emptyobject &= !objects[i].genref;                                  // if any references to be generated, object cannot be empty
       }
 
       // start XML object
       OpenXMLObject(xml, obj->GetType());
-      AddXMLAttributes(xml, values);
-                     
+
+      // first entry in list is ALWAYS the set of attributes for the object
+      if (values.size()) AddXMLAttributes(xml, values[0]);
+
       if (!emptyobject)
       {
         AddXMLValues(xml, values);
-                   
+
         // output references
-        for (i = 0; i < objects.size(); i++)
+        for (i = 0; i < (uint_t)objects.size(); i++)
         {
           const ADMObject::REFERENCEDOBJECT& object = objects[i];
 
@@ -340,10 +333,12 @@ namespace ADMXMLGenerator
 
         // output contained data
         ADMObject::CONTAINEDOBJECT object;
+        BBCDEBUG3(("Object %s has %u contained objects", obj->ToString().c_str(), obj->GetContainedObjectCount()));
         for (i = 0; obj->GetContainedObject(i, object); i++)
         {
           OpenXMLObject(xml, object.type);
-          AddXMLAttributes(xml, object.attrs);
+          // first entry in list is ALWAYS the set of attributes for the object
+          if (object.values.size()) AddXMLAttributes(xml, object.values[0]);
           AddXMLValues(xml, object.values);
           CloseXMLObject(xml);
         }
@@ -353,12 +348,15 @@ namespace ADMXMLGenerator
       }
       else
       {
+        BBCDEBUG4(("Object %s is empty", obj->ToString().c_str()));
+
         // end empty XML object
         CloseXMLObject(xml);
       }
     }
+    else BBCDEBUG3(("Object %s xml.complete %u standarddef %u (%u contained objects)", obj->ToString().c_str(), (uint_t)xml.complete, (uint_t)obj->IsStandardDefinition(), obj->GetContainedObjectCount()));
   }
-  
+
   /*--------------------------------------------------------------------------------*/
   /** Generic XML creation
    *
@@ -388,11 +386,19 @@ namespace ADMXMLGenerator
       xml.adm->GetObjects(types[i], list);
     }
 
+    // use tracklist chunk to generate reference list
+    const ADMData::TRACKLIST& tracklist = xml.adm->GetTrackList();
+    for (i = 0; i < (uint_t)tracklist.size(); i++)
+    {
+      // add each track to list to get references to streamformats and packformats
+      list.push_back(tracklist[i]);
+    }
+
     // add referenced objects to list
     xml.adm->GetReferencedObjects(list);
 
     StartXML(xml);
-    
+
     if (xml.ebumode)
     {
       // EBU version of XML
@@ -424,9 +430,11 @@ namespace ADMXMLGenerator
     for (i = 0; i < NUMBEROF(types); i++)
     {
       // find objects of correct type and output them
-      for (j = 0; j < list.size(); j++)
+      for (j = 0; j < (uint_t)list.size(); j++)
       {
         const ADMObject *obj = list[j];
+
+        BBCDEBUG4(("Type %s object %s", types[i].c_str(), obj->ToString().c_str()));
 
         // can this object be outputted?
         if (obj->GetType() == types[i])
@@ -462,7 +470,7 @@ namespace ADMXMLGenerator
     TEXTXML context;
 
     context.adm       = adm;
-    
+
     // clear destination data
     memset(&context.destination, 0, sizeof(context.destination));
 
@@ -477,7 +485,7 @@ namespace ADMXMLGenerator
     context.opened    = false;
     context.complete  = complete;
     context.eollast   = false;
-  
+
     GenerateXML(context);
 
     return context.length;
@@ -519,7 +527,7 @@ namespace ADMXMLGenerator
     context.length    = 0;
     context.complete  = complete;
     context.eollast   = false;
-  
+
     GenerateXML(context);
 
     return context.length;

@@ -2,7 +2,7 @@ Source: bbcat-adm
 Priority: optional
 Maintainer: Richard Day <richard.day@bbc.co.uk>
 Standards-Version: 3.9.3
-Build-Depends: debhelper (>= 9), pkg-config, libbbcat-base-dev (>= 0.1.2.1), libbbcat-dsp-dev (>= 0.1.2.1), json-spirit-dev (>= 4.0.6), libboost-test-dev (>= 1.49.0)
+Build-Depends: debhelper (>= 9), pkg-config, libbbcat-base-dev (>= 0.1.2.0), libbbcat-dsp-dev (>= 0.1.2.0), json-spirit-dev (>= 4.0.6), libboost-test-dev (>= 1.49.0)
 
 Package: libbbcat-adm
 Section: libs

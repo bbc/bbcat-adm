@@ -6,11 +6,13 @@ Dependencies
 
 bbcat-base - git@git0.rd.bbc.co.uk:aplibs/bbcat-base.git
 bbcat-dsp - git@git0.rd.bbc.co.uk:aplibs/bbcat-dsp.git
+jsoncpp - https://github.com/open-source-parsers/jsoncpp
 
 Files
 
 autogen.sh - simple autotools script
 configure.ac - configure configuration for autotools
+CMakeLists.txt - CMake configuration
 COPYING - information on copying this library
 debian/ - Debian control and version information
 doxygen.am - Doxygen automake file
@@ -26,6 +28,11 @@ src/ADMData.h                           |
 src/ADMObjects.cpp                      | Individual component ADM objects
 src/ADMObjects.h                        |
 
+src/ADMSubObjects.cpp                   | Objects representing complex ADM elements
+src/ADMSubObjects.h                     |
+
+src/CMakeLists.txt						| CMake configuration for source files
+
 src/Makefile.am                         | Makefile for automake
 
 src/ADMXMLGenerator.cpp					| A simple XML generator for ADM data
@@ -39,11 +46,46 @@ src/AudioObjectParameters.h             |
 src/XMLValue.cpp						| A simple XML value/attribute/value with attribute class
 src/XMLValue.h							|
 
+src/register.cpp						| Registration function (see below)
+
+--------------------------------------------------------------------------------
+Initialising the Library (IMPORTANT!)
+
+Compilers are clever and try to remove unused code whilst linking applications.
+However, sometimes they are too clever and remove some code that *appears* not
+to be used but is.  Uses of the SelfRegisteringParametricObject class may
+particularly suffer from this as it appears as though nothing is using the
+code.
+
+To stop this, each library includes a register.cpp file which explicitly calls a
+set of initilisation and registration functions. This file also calls the
+registration functions of any libraries it is dependant upon.
+
+For this to work, any application *must* call the registration function of most
+dependant library it uses.
+
+For example, for an application using only this library:
+BBC_AUDIOTOOLBOX_START
+extern bool bbcat_register_bbcat_adm();
+BBC_AUDIOTOOLBOX_END
+
+using namespace bbcat;
+
+int main(int argc, char *argv[])
+{
+  // ensure libraries are set up
+  bbcat_register_bbcat_adm();
+}
+
+register.cpp is included in repo but will be updated by the script
+bbcat-common/findregisterfunctions.sh if autotools is used.  The CMake process
+is also capable of autogenerating this file if the original in the source
+directory does not exist.
+
 --------------------------------------------------------------------------------
 Building on Windows (Visual Studio)
 
-Download and install CMake (https://cmake.org/download/) *first*
-Download and install git (https://git-scm.com/download/win)
+Follow the installation instructions for bbcat-base (https://github.com/bbcrd/bbcat-base)
 
 Use git-bash to change to the directory where the libraries are to be cloned to
 
@@ -61,7 +103,6 @@ Notes on Windows builds
 As there is no standardised directories for cmake files, libraries, etc. the build *assumes* that:
 1. Library includes, libs and shared files will be stored in c:\local\bbcat
 2. CMake configuration files will be stored in c:\local\cmake
-3. http://sourceforge.net/projects/pthreads4w/ has been downloaded and extracted to c:\local\pthreads (rename unzip folder to 'pthreads')
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------

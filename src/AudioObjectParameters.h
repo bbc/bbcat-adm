@@ -38,13 +38,13 @@ BBC_AUDIOTOOLBOX_START
  */
 /*--------------------------------------------------------------------------------*/
 class ADMAudioObject;
-class AudioObjectParameters
+class AudioObjectParameters : public JSONSerializable
 {
 public:
   AudioObjectParameters();
   AudioObjectParameters(const AudioObjectParameters& obj);
 #if ENABLE_JSON
-  AudioObjectParameters(const json_spirit::mObject& obj);
+  AudioObjectParameters(const JSONValue& obj);
 #endif
   virtual ~AudioObjectParameters();
 
@@ -56,15 +56,30 @@ public:
 
 #if ENABLE_JSON
   /*--------------------------------------------------------------------------------*/
+  /** Return object as JSON object
+   *
+   * @param force true to force setting of JSON members from internal values even if they have NOT been set
+   */
+  /*--------------------------------------------------------------------------------*/
+  using JSONSerializable::ToJSON;
+  virtual void ToJSON(JSONValue& obj, bool force) const;
+  virtual void ToJSON(JSONValue& obj) const {ToJSON(obj, false);}
+    
+  /*--------------------------------------------------------------------------------*/
+  /** Set object from JSON
+   *
+   * @param reset true to reset any parameters NOT found in JSON to their defaults
+   */
+  /*--------------------------------------------------------------------------------*/
+  virtual bool FromJSON(const JSONValue& obj, bool reset);
+  virtual bool FromJSON(const JSONValue& obj) {return FromJSON(obj, true);}
+  virtual AudioObjectParameters& FromJSONEx(const JSONValue& obj, bool reset = true) {FromJSON(obj, reset); return *this;}
+
+  /*--------------------------------------------------------------------------------*/
   /** Assignment operator
    */
   /*--------------------------------------------------------------------------------*/
-  virtual AudioObjectParameters& operator = (const json_spirit::mObject& obj) {return FromJSON(obj);}
-  /*--------------------------------------------------------------------------------*/
-  /** Assignment operator
-   */
-  /*--------------------------------------------------------------------------------*/
-  virtual AudioObjectParameters& FromJSON(const json_spirit::mObject& obj, bool reset = true);
+  virtual AudioObjectParameters& operator = (const JSONValue& obj) {FromJSON(obj); return *this;}
 #endif
 
   /*--------------------------------------------------------------------------------*/
@@ -679,32 +694,6 @@ public:
   /*--------------------------------------------------------------------------------*/
   std::string ToString(bool pretty = false) const;
 
-#if ENABLE_JSON
-  /*--------------------------------------------------------------------------------*/
-  /** Convert parameters to a JSON object
-   */
-  /*--------------------------------------------------------------------------------*/
-  virtual void ToJSON(json_spirit::mObject& obj, bool force = false) const;
-
-  /*--------------------------------------------------------------------------------*/
-  /** Convert parameters to a JSON object
-   */
-  /*--------------------------------------------------------------------------------*/
-  virtual json_spirit::mObject ToJSON(bool force = false) const {json_spirit::mObject obj; ToJSON(obj, force); return obj;}
-
-  /*--------------------------------------------------------------------------------*/
-  /** Operator overload
-   */
-  /*--------------------------------------------------------------------------------*/
-  operator json_spirit::mObject() const {return ToJSON();}
- 
-  /*--------------------------------------------------------------------------------*/
-  /** Convert parameters to a JSON string
-   */
-  /*--------------------------------------------------------------------------------*/
-  std::string ToJSONString() const {return json_spirit::write(ToJSON(), json_spirit::pretty_print);}
-#endif
-
   /*--------------------------------------------------------------------------------*/
   /** Return an object that has continuous parameters interpolated at the given point
    *
@@ -723,7 +712,7 @@ public:
   /** Parameter modifier class
    */
   /*--------------------------------------------------------------------------------*/
-  class Modifier : public RefCountedObject
+  class Modifier : public RefCountedObject, public JSONSerializable
   {
   public:
     Modifier() : RefCountedObject() {}
@@ -757,39 +746,22 @@ public:
 
 #if ENABLE_JSON
     /*--------------------------------------------------------------------------------*/
+    /** Return object as JSON object
+     */
+    /*--------------------------------------------------------------------------------*/
+    virtual void ToJSON(JSONValue& obj) const;
+
+    /*--------------------------------------------------------------------------------*/
+    /** Set object from JSON
+     */
+    /*--------------------------------------------------------------------------------*/
+    virtual bool FromJSON(const JSONValue& obj);
+
+    /*--------------------------------------------------------------------------------*/
     /** Assignment operator
      */
     /*--------------------------------------------------------------------------------*/
-    virtual Modifier& operator = (const json_spirit::mObject& obj) {return FromJSON(obj);}
-    /*--------------------------------------------------------------------------------*/
-    /** Assignment operator
-     */
-    /*--------------------------------------------------------------------------------*/
-    virtual Modifier& FromJSON(const json_spirit::mObject& obj);
-
-    /*--------------------------------------------------------------------------------*/
-    /** Convert parameters to a JSON object
-     */
-    /*--------------------------------------------------------------------------------*/
-    virtual void ToJSON(json_spirit::mObject& obj) const;
-
-    /*--------------------------------------------------------------------------------*/
-    /** Convert parameters to a JSON object
-     */
-    /*--------------------------------------------------------------------------------*/
-    virtual json_spirit::mObject ToJSON() const {json_spirit::mObject obj; ToJSON(obj); return obj;}
-
-    /*--------------------------------------------------------------------------------*/
-    /** Operator overload
-     */
-    /*--------------------------------------------------------------------------------*/
-    operator json_spirit::mObject() const {return ToJSON();}
- 
-    /*--------------------------------------------------------------------------------*/
-    /** Convert parameters to a JSON string
-     */
-    /*--------------------------------------------------------------------------------*/
-    std::string ToJSONString() const {return json_spirit::write(ToJSON(), json_spirit::pretty_print);}
+    virtual Modifier& operator = (const JSONValue& obj) {FromJSON(obj); return *this;}
 #endif
   };
 
@@ -1253,22 +1225,30 @@ protected:
    * @param reset true to reset parameter to its default if it is not found in the JSON object
    * @param defval reset value if reset = true
    * @param limit optional function ptr to a limiting/converting function that will convert the JSON value to a usable parameter value
+   *
+   * @return true if parameter NOT found or set correctly from JSON, false otherwise
    */
   /*--------------------------------------------------------------------------------*/
   template<typename T1, typename T2>
-  void SetFromJSON(Parameter_t p, T1& param, T2& val, const json_spirit::mObject& obj, bool reset = false, const T1& defval = T1(), T1 (*limit)(const T2& val) = NULL)
+  bool SetFromJSON(Parameter_t p, T1& param, T2& val, const JSONValue& obj, bool reset = false, const T1& defval = T1(), T1 (*limit)(const T2& val) = NULL)
   {
-    json_spirit::mObject::const_iterator it;
+    bool success = false;
     // try and find named item in object
-    if ((it = obj.find(parameterdescs[p].name)) != obj.end())
+    // read value from JSON into intermediate value
+    if (obj.isObject() && obj.isMember(parameterdescs[p].name))
     {
-      // read value from JSON into intermediate value
-      bbcat::FromJSON(it->second, val);
-      // use intermediate value to set parameter
-      SetParameter<>(p, param, val, limit);
+      if (json::FromJSON(obj[parameterdescs[p].name], val))
+      {
+        // use intermediate value to set parameter
+        SetParameter<>(p, param, val, limit);
+        success = true;
+        reset   = false;    // prevent resetting of the parameter
+      }
     }
-    // if not found, reset parameter to default
-    else if (reset) ResetParameter<>(p, param, defval);
+    else success = true;
+    // if not found or failed to decode, reset parameter to default
+    if (reset) ResetParameter<>(p, param, defval);
+    return success;
   }    
 
   /*--------------------------------------------------------------------------------*/
@@ -1287,23 +1267,31 @@ protected:
    * @param defval reset value if reset = true
    * @param limit optional function ptr to a limiting/converting function that will convert the JSON value to a usable parameter value
    *
+   * @return true if parameter NOT found or set correctly from JSON, false otherwise
+   *
    * @note *param may be new'd or deleted as part of this function
    */
   /*--------------------------------------------------------------------------------*/
   template<typename T1, typename T2>
-  void SetFromJSON(Parameter_t p, T1 **param, T2& val, const json_spirit::mObject& obj, bool reset = false, const T1& defval = T1(), T1 (*limit)(const T2& val) = NULL)
+  bool SetFromJSON(Parameter_t p, T1 **param, T2& val, const JSONValue& obj, bool reset = false, const T1& defval = T1(), T1 (*limit)(const T2& val) = NULL)
   {
-    json_spirit::mObject::const_iterator it;
+    bool success = false;
     // try and find named item in object
-    if ((it = obj.find(parameterdescs[p].name)) != obj.end())
+    // read value from JSON into intermediate value
+    if (obj.isObject() && obj.isMember(parameterdescs[p].name))
     {
-      // read value from JSON into intermediate value
-      bbcat::FromJSON(it->second, val);
-      // use intermediate value to set parameter
-      SetParameter<>(p, param, val, limit);
+      if (json::FromJSON(obj[parameterdescs[p].name], val))
+      {
+        // use intermediate value to set parameter
+        SetParameter<>(p, param, val, limit);
+        success = true;
+        reset   = false;    // prevent resetting of the parameter
+      }
     }
-    // if not found, reset parameter to default
-    else if (reset) ResetParameter<>(p, param, defval);
+    else success = true;
+    // if not found or failed to decode, reset parameter to default
+    if (reset) ResetParameter<>(p, param, defval);
+    return success;
   }    
 
   /*--------------------------------------------------------------------------------*/
@@ -1320,9 +1308,12 @@ protected:
    */
   /*--------------------------------------------------------------------------------*/
   template<typename T1>
-  void SetToJSON(Parameter_t p, const T1& param, json_spirit::mObject& obj, bool force = false) const
+  void SetToJSON(Parameter_t p, const T1& param, JSONValue& obj, bool force = false) const
   {
-    if (force || IsParameterSet(p)) obj[parameterdescs[p].name] = bbcat::ToJSON(param);
+    if (force || IsParameterSet(p))
+    {
+      json::ToJSON(param, obj[parameterdescs[p].name]);
+    }
   }    
 
   /*--------------------------------------------------------------------------------*/
@@ -1339,9 +1330,12 @@ protected:
    */
   /*--------------------------------------------------------------------------------*/
   template<typename T1>
-  void SetToJSONPtr(Parameter_t p, const T1 *param, json_spirit::mObject& obj, bool force = false) const
+  void SetToJSONPtr(Parameter_t p, const T1 *param, JSONValue& obj, bool force = false) const
   {
-    if (force || IsParameterSet(p)) obj[parameterdescs[p].name] = bbcat::ToJSON(param ? *param : T1());
+    if (force || IsParameterSet(p))
+    {
+      json::ToJSON(param ? *param : T1(), obj[parameterdescs[p].name]);
+    }
   }    
 
   /*--------------------------------------------------------------------------------*/
@@ -1360,9 +1354,12 @@ protected:
    */
   /*--------------------------------------------------------------------------------*/
   template<typename T1, typename T2>
-  void SetToJSON(Parameter_t p, const T1& param, json_spirit::mObject& obj, bool force, T2 (*convert)(const T1& val)) const
+  void SetToJSON(Parameter_t p, const T1& param, JSONValue& obj, bool force, T2 (*convert)(const T1& val)) const
   {
-    if (force || IsParameterSet(p)) obj[parameterdescs[p].name] = bbcat::ToJSON((*convert)(param));
+    if (force || IsParameterSet(p))
+    {
+      json::ToJSON((*convert)(param), obj[parameterdescs[p].name]);
+    }
   }    
 
   /*--------------------------------------------------------------------------------*/
@@ -1381,9 +1378,12 @@ protected:
    */
   /*--------------------------------------------------------------------------------*/
   template<typename T1, typename T2>
-  void SetToJSON(Parameter_t p, const T1 *param, json_spirit::mObject& obj, bool force, T2 (*convert)(const T1& val)) const
+  void SetToJSON(Parameter_t p, const T1 *param, JSONValue& obj, bool force, T2 (*convert)(const T1& val)) const
   {
-    if (force || IsParameterSet(p)) obj[parameterdescs[p].name] = bbcat::ToJSON((*convert)(param ? *param : T1()));
+    if (force || IsParameterSet(p))
+    {
+      json::ToJSON((*convert)(param ? *param : T1()), obj[parameterdescs[p].name]);
+    }
   }    
 #endif
 
@@ -1544,6 +1544,12 @@ protected:
   static const PARAMETERDESC parameterdescs[Parameter_count];
   static const Position nullposition;
 };
+
+
+#if ENABLE_JSON
+inline void ToJSON(const AudioObjectParameters& val, JSONValue& obj, bool force = false) {val.ToJSON(obj, force);}
+inline bool FromJSON(const JSONValue& obj, AudioObjectParameters& val, bool reset = true) {return val.FromJSON(obj, reset);}
+#endif
 
 BBC_AUDIOTOOLBOX_END
 

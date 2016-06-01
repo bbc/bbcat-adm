@@ -66,7 +66,7 @@ AudioObjectParameters::AudioObjectParameters(const AudioObjectParameters& obj) :
 }
 
 #if ENABLE_JSON
-AudioObjectParameters::AudioObjectParameters(const json_spirit::mObject& obj) : minposition(NULL),
+AudioObjectParameters::AudioObjectParameters(const JSONValue& obj) : minposition(NULL),
                                                                                 maxposition(NULL),
                                                                                 setbitmap(0),
                                                                                 excludedZones(NULL)
@@ -220,9 +220,8 @@ void AudioObjectParameters::MultiplyByScene(float width, float height, float dep
 /** Assignment operator
  */
 /*--------------------------------------------------------------------------------*/
-AudioObjectParameters& AudioObjectParameters::FromJSON(const json_spirit::mObject& obj, bool reset)
+bool AudioObjectParameters::FromJSON(const JSONValue& obj, bool reset)
 {
-  json_spirit::mObject::const_iterator it;
   Position     pval;
   ParameterSet sval;
   std::string  str;
@@ -232,40 +231,44 @@ AudioObjectParameters& AudioObjectParameters::FromJSON(const json_spirit::mObjec
   uint_t       uval;
   int          ival;
   bool         bval;
+  bool         success = true;
+    
+  success &= SetFromJSON<>(Parameter_channel, values.channel, ival, obj, reset, 0U, &Limit0u);
+  success &= SetFromJSON<>(Parameter_duration, values.duration, i64val, obj, reset, (uint64_t)0);
+  success &= SetFromJSON<>(Parameter_cartesian, values.cartesian, bval, obj, reset);
+  success &= SetFromJSON<>(Parameter_position, position, pval, obj, reset);
+  success &= SetFromJSON<>(Parameter_minposition, &minposition, pval, obj, reset);
+  success &= SetFromJSON<>(Parameter_maxposition, &maxposition, pval, obj, reset);
+  success &= SetFromJSON<>(Parameter_gain, values.gain, dval, obj, reset, 1.0);
+  success &= SetFromJSON<>(Parameter_width, values.width, fval, obj, reset, 0.f, &Limit0f);
+  success &= SetFromJSON<>(Parameter_depth, values.depth, fval, obj, reset, 0.f, &Limit0f);
+  success &= SetFromJSON<>(Parameter_height, values.height, fval, obj, reset, 0.f, &Limit0f);
+  success &= SetFromJSON<>(Parameter_divergencebalance, values.divergencebalance, fval, obj, reset, 0.f, &Limit0to1f);
+  success &= SetFromJSON<>(Parameter_divergenceazimuth, values.divergenceazimuth, fval, obj, reset, 0.f, &Limit0f);
+  success &= SetFromJSON<>(Parameter_diffuseness, values.diffuseness, fval, obj, reset, 0.f, &Limit0to1f);
+  success &= SetFromJSON<>(Parameter_delay, values.delay, fval, obj, reset, 0.f, &Limit0f);
+  success &= SetFromJSON<>(Parameter_objectimportance, values.objectimportance, uval, obj, reset, (uint8_t)GetObjectImportanceDefault(), &LimitImportance);
+  success &= SetFromJSON<>(Parameter_channelimportance, values.channelimportance, uval, obj, reset, (uint8_t)GetChannelImportanceDefault(), &LimitImportance);
+  success &= SetFromJSON<>(Parameter_dialogue, values.dialogue, uval, obj, reset, (uint8_t)GetDialogueDefault(), &LimitDialogue);
+  success &= SetFromJSON<>(Parameter_channellock, values.channellock, bval, obj, reset);
+  success &= SetFromJSON<>(Parameter_channellockmaxdistance, values.channellockmaxdistance, fval, obj, reset, 0.f, &LimitMaxDistance);
+  success &= SetFromJSON<>(Parameter_interact, values.interact, bval, obj, reset, (uint8_t)GetInteractDefault());
+  success &= SetFromJSON<>(Parameter_interpolate, values.interpolate, bval, obj, reset, (uint8_t)1);
+  success &= SetFromJSON<>(Parameter_interpolationtime, values.interpolationtime, i64val, obj, reset, (uint64_t)0);
+  success &= SetFromJSON<>(Parameter_onscreen, values.onscreen, bval, obj, reset);
+  success &= SetFromJSON<>(Parameter_disableducking, values.disableducking, bval, obj, reset, (uint8_t)GetDisableDuckingDefault());
+  success &= SetFromJSON<>(Parameter_othervalues, othervalues, sval, obj, reset);
   
-  SetFromJSON<>(Parameter_channel, values.channel, ival, obj, reset, 0U, &Limit0u);
-  SetFromJSON<>(Parameter_duration, values.duration, i64val, obj, reset, (uint64_t)0);
-  SetFromJSON<>(Parameter_cartesian, values.cartesian, bval, obj, reset);
-  SetFromJSON<>(Parameter_position, position, pval, obj, reset);
-  SetFromJSON<>(Parameter_minposition, &minposition, pval, obj, reset);
-  SetFromJSON<>(Parameter_maxposition, &maxposition, pval, obj, reset);
-  SetFromJSON<>(Parameter_gain, values.gain, dval, obj, reset, 1.0);
-  SetFromJSON<>(Parameter_width, values.width, fval, obj, reset, 0.f, &Limit0f);
-  SetFromJSON<>(Parameter_depth, values.depth, fval, obj, reset, 0.f, &Limit0f);
-  SetFromJSON<>(Parameter_height, values.height, fval, obj, reset, 0.f, &Limit0f);
-  SetFromJSON<>(Parameter_divergencebalance, values.divergencebalance, fval, obj, reset, 0.f, &Limit0to1f);
-  SetFromJSON<>(Parameter_divergenceazimuth, values.divergenceazimuth, fval, obj, reset, 0.f, &Limit0f);
-  SetFromJSON<>(Parameter_diffuseness, values.diffuseness, fval, obj, reset, 0.f, &Limit0to1f);
-  SetFromJSON<>(Parameter_delay, values.delay, fval, obj, reset, 0.f, &Limit0f);
-  SetFromJSON<>(Parameter_objectimportance, values.objectimportance, uval, obj, reset, (uint8_t)GetObjectImportanceDefault(), &LimitImportance);
-  SetFromJSON<>(Parameter_channelimportance, values.channelimportance, uval, obj, reset, (uint8_t)GetChannelImportanceDefault(), &LimitImportance);
-  SetFromJSON<>(Parameter_dialogue, values.dialogue, uval, obj, reset, (uint8_t)GetDialogueDefault(), &LimitDialogue);
-  SetFromJSON<>(Parameter_channellock, values.channellock, bval, obj, reset);
-  SetFromJSON<>(Parameter_channellockmaxdistance, values.channellockmaxdistance, fval, obj, reset, 0.f, &LimitMaxDistance);
-  SetFromJSON<>(Parameter_interact, values.interact, bval, obj, reset, (uint8_t)GetInteractDefault());
-  SetFromJSON<>(Parameter_interpolate, values.interpolate, bval, obj, reset, (uint8_t)1);
-  SetFromJSON<>(Parameter_interpolationtime, values.interpolationtime, i64val, obj, reset, (uint64_t)0);
-  SetFromJSON<>(Parameter_onscreen, values.onscreen, bval, obj, reset);
-  SetFromJSON<>(Parameter_disableducking, values.disableducking, bval, obj, reset, (uint8_t)GetDisableDuckingDefault());
-  SetFromJSON<>(Parameter_othervalues, othervalues, sval, obj, reset);
-
   // support legacy 'importance' parameter name for channel importance
-  if ((it = obj.find("importance")) != obj.end())
+  if (obj.isObject() && obj.isMember("importance"))
   {
     // read value from JSON into intermediate value
-    bbcat::FromJSON(it->second, uval);
-    // use intermediate value to set parameter
-    SetParameter<>(Parameter_channelimportance, values.channelimportance, uval, &LimitImportance);
+    if (json::FromJSON(obj["importance"], uval))
+    {
+      // use intermediate value to set parameter
+      SetParameter<>(Parameter_channelimportance, values.channelimportance, uval, &LimitImportance);
+    }
+    else success = false;
   }
 
   // delete existing list of excluded zones
@@ -274,42 +277,43 @@ AudioObjectParameters& AudioObjectParameters::FromJSON(const json_spirit::mObjec
     delete excludedZones;
     excludedZones = NULL;
   }
-  
-  {
-    json_spirit::mObject::const_iterator it, it2;
-    
-    // try and find zoneExclusion item in object
-    if (((it = obj.find("excludedzones")) != obj.end()) && (it->second.type() == json_spirit::array_type))
-    {
-      json_spirit::mArray zones = it->second.get_array();
-      uint_t i;
 
-      for (i = 0; i < zones.size(); i++)
+  {
+    // try and find zoneExclusion item in object
+    if (obj.isObject() && obj.isMember("excludedzones") && obj["excludedzones"].isArray())
+    {
+      const JSONValue& zones = obj["excludedzones"];
+
+      for (uint_t i = 0; i < zones.size(); i++)
       {
-        if (zones[i].type() == json_spirit::obj_type)
+        if (zones[i].isObject())
         {
-          json_spirit::mObject obj = zones[i].get_obj();
+          const JSONValue& obj = zones[i];
           std::string name;
           float minx, miny, minz, maxx, maxy, maxz;
 
           // extract name and limits of excluded zone
-          if (((it2 = obj.find("name")) != obj.end()) && bbcat::FromJSON(it2->second, name) &&
-              ((it2 = obj.find("minx")) != obj.end()) && bbcat::FromJSON(it2->second, minx) &&
-              ((it2 = obj.find("miny")) != obj.end()) && bbcat::FromJSON(it2->second, miny) &&
-              ((it2 = obj.find("minz")) != obj.end()) && bbcat::FromJSON(it2->second, minz) &&
-              ((it2 = obj.find("maxx")) != obj.end()) && bbcat::FromJSON(it2->second, maxx) &&
-              ((it2 = obj.find("maxy")) != obj.end()) && bbcat::FromJSON(it2->second, maxy) &&
-              ((it2 = obj.find("maxz")) != obj.end()) && bbcat::FromJSON(it2->second, maxz))
+          if (json::FromJSON(obj, "name", name) &&
+              json::FromJSON(obj, "minx", minx) &&
+              json::FromJSON(obj, "miny", miny) &&
+              json::FromJSON(obj, "minz", minz) &&
+              json::FromJSON(obj, "maxx", maxx) &&
+              json::FromJSON(obj, "maxy", maxy) &&
+              json::FromJSON(obj, "maxz", maxz))
           {
             AddExcludedZone(name, minx, miny, minz, maxx, maxy, maxz);
           }
-          else BBCERROR("Unable to extract excluded zones from JSON '%s'", json_spirit::write(it->second).c_str());
+          else
+          {
+            BBCERROR("Unable to extract excluded zones from JSON '%s'", json::ToJSONString(obj).c_str());
+            success = false;
+          }
         }
       }
     }
   }
   
-  return *this;
+  return success;
 }
 #endif
 
@@ -738,7 +742,7 @@ std::string AudioObjectParameters::ToString(bool pretty) const
 /** Convert parameters to a JSON object
  */
 /*--------------------------------------------------------------------------------*/
-void AudioObjectParameters::ToJSON(json_spirit::mObject& obj, bool force) const
+void AudioObjectParameters::ToJSON(JSONValue& obj, bool force) const
 {
   SetToJSON<>(Parameter_channel, (int)values.channel, obj, force);
   SetToJSON<>(Parameter_duration, (sint64_t)values.duration, obj, force);
@@ -770,10 +774,10 @@ void AudioObjectParameters::ToJSON(json_spirit::mObject& obj, bool force) const
   const ExcludedZone *zone = GetFirstExcludedZone();
   if (zone)
   {
-    json_spirit::mArray zones;
+    JSONValue zones;
     while (zone)
     {
-      json_spirit::mObject subobj;
+      JSONValue subobj;
       Position c1 = zone->GetMinCorner();
       Position c2 = zone->GetMaxCorner();
 
@@ -785,15 +789,15 @@ void AudioObjectParameters::ToJSON(json_spirit::mObject& obj, bool force) const
       subobj["maxy"] = c2.pos.y;
       subobj["maxz"] = c2.pos.z;
 
-      zones.push_back(subobj);
+      zones.append(subobj);
     
       zone = zone->GetNext();
     }
 
     obj["excludedzones"] = zones;
   }
-  
-  BBCDEBUG2(("JSON: %s", json_spirit::write(obj, json_spirit::pretty_print).c_str()));
+
+  BBCDEBUG2(("JSON: %s", ToJSONString(obj, true).c_str()));
 }
 #endif
 
@@ -919,7 +923,7 @@ bool AudioObjectParameters::Modifier::operator == (const Modifier& obj) const
 /** Assignment operator
  */
 /*--------------------------------------------------------------------------------*/
-AudioObjectParameters::Modifier& AudioObjectParameters::Modifier::FromJSON(const json_spirit::mObject& obj)
+bool AudioObjectParameters::Modifier::FromJSON(const JSONValue& obj)
 {
   INamedParameter *parameters[] =
   {
@@ -928,15 +932,14 @@ AudioObjectParameters::Modifier& AudioObjectParameters::Modifier::FromJSON(const
     &gain,
     &scale,
   };
-  bbcat::FromJSON(obj, parameters, NUMBEROF(parameters));
-  return *this;
+  return json::FromJSON(obj, parameters, NUMBEROF(parameters));
 }
 
 /*--------------------------------------------------------------------------------*/
 /** Convert parameters to a JSON object
  */
 /*--------------------------------------------------------------------------------*/
-void AudioObjectParameters::Modifier::ToJSON(json_spirit::mObject& obj) const
+void AudioObjectParameters::Modifier::ToJSON(JSONValue& obj) const
 {
   const INamedParameter *parameters[] =
   {
@@ -945,7 +948,7 @@ void AudioObjectParameters::Modifier::ToJSON(json_spirit::mObject& obj) const
     &gain,
     &scale,
   };
-  bbcat::ToJSON(parameters, NUMBEROF(parameters), obj);
+  json::ToJSON(parameters, NUMBEROF(parameters), obj);
 }
 #endif
 

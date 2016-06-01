@@ -17,33 +17,29 @@ libbbcat_adm_@BBCAT_ADM_MAJORMINOR@_la_CPPFLAGS =	\
 	$(BBCAT_ADM_CFLAGS)								\
 	$(BBCAT_GLOBAL_ADM_CFLAGS)
 
-libbbcat_adm_@BBCAT_ADM_MAJORMINOR@_la_SOURCES =	\
-	ADMData.cpp										\
-	ADMObjects.cpp									\
-	ADMXMLGenerator.cpp								\
-	AudioObjectParameters.cpp						\
-	XMLValue.cpp									\
-	version.cpp
+libbbcat_adm_sources =							\
+	ADMData.cpp									\
+	ADMObjects.cpp								\
+	ADMSubObjects.cpp							\
+	ADMXMLGenerator.cpp							\
+	AudioObjectParameters.cpp					\
+	XMLValue.cpp
 
 pkginclude_HEADERS =							\
 	ADMData.h									\
 	ADMObjects.h								\
+	ADMSubObjects.h								\
 	ADMXMLGenerator.h							\
 	AudioObjectCursor.h							\
 	AudioObjectParameters.h						\
-	XMLValue.h									\
-	version.h
+	XMLValue.h
 
-CLEANFILES = version.h version.cpp
+#CLEANFILES = register.cpp
 
 noinst_HEADERS =
 
-version.h: Makefile ../config.h ../gitbranch.txt
-	echo "{\"@PACKAGE@\", \"@VERSION@-`cat ../gitbranch.txt`\"}," >$@
+# register.cpp is included in repo but will be updated by the script below 
+register.cpp: Makefile ../config.h ../gitbranch.txt $(libbbcat_adm_sources)
+	sh $(prefix)/share/bbcat-common/findregisterfunctions.sh "bbcat-adm" "@VERSION@-`cat ../gitbranch.txt`" "$(libbbcat_adm_sources)" "bbcat_dsp" >$@
 
-version.cpp: Makefile ../config.h ../gitbranch.txt
-	echo "/* Auto-generated: DO NOT EDIT! */" >$@
-	echo "#include <bbcat-base/LoadedVersions.h>" >>$@
-	echo "BBC_AUDIOTOOLBOX_START" >>$@
-	echo "volatile uint_t __keep_@PACKAGE@_version = bbcat::LoadedVersions::Get().Register(\"@PACKAGE@\", \"@VERSION@-`cat ../gitbranch.txt`\");" >>$@
-	echo "BBC_AUDIOTOOLBOX_END" >>$@
+libbbcat_adm_@BBCAT_ADM_MAJORMINOR@_la_SOURCES = $(libbbcat_adm_sources) register.cpp

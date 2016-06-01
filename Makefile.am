@@ -3,7 +3,7 @@ AUTOMAKE_OPTIONS = foreign
 
 include doxygen.am
 
-SUBDIRS = src
+SUBDIRS = src test
 
 adm_DATA  = share/licences.txt
 
@@ -21,7 +21,7 @@ bbcat-adm-$(BBCAT_ADM_MAJORMINOR)-uninstalled.pc: bbcat-adm-uninstalled.pc
 
 BUILT_SOURCES = bbcat-adm-$(BBCAT_ADM_MAJORMINOR)-uninstalled.pc gitbranch.txt
 
-CLEANFILES = bbcat-adm-$(BBCAT_ADM_MAJORMINOR).pc bbcat-adm-$(BBCAT_ADM_MAJORMINOR)-uninstalled.pc src/SelfRegisteringObjects.h src/version.h src/version.cpp gitbranch.txt .branch
+CLEANFILES = bbcat-adm-$(BBCAT_ADM_MAJORMINOR).pc bbcat-adm-$(BBCAT_ADM_MAJORMINOR)-uninstalled.pc src/register.cpp gitbranch.txt .branch
 
 ACLOCAL_FLAGS = -I m4
 

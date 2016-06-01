@@ -5,7 +5,7 @@
 #include <vector>
 #include <map>
 
-#include <bbcat-base/misc.h>
+#include <bbcat-base/ThreadLock.h>
 
 #include "ADMObjects.h"
 
@@ -17,7 +17,7 @@ BBC_AUDIOTOOLBOX_START
  * It CANNOT, by itself decode the XML from axml chunks, that must be done by a derived class.
  */
 /*--------------------------------------------------------------------------------*/
-class ADMData
+class ADMData : public JSONSerializable
 {
 public:
   ADMData();
@@ -28,7 +28,7 @@ public:
   /** Assignment operator
    */
   /*--------------------------------------------------------------------------------*/
-  virtual ADMData& operator = (const ADMData& obj) {Copy(obj); return *this;}
+  virtual ADMData& operator = (const ADMData& obj) {ThreadLock lock(tlock); Copy(obj); return *this;}
 
   /*--------------------------------------------------------------------------------*/
   /** Copy from another ADM
@@ -41,6 +41,12 @@ public:
    */
   /*--------------------------------------------------------------------------------*/
   virtual void Delete();
+
+  /*--------------------------------------------------------------------------------*/
+  /** Delete all objects within this ADM that are not referenced
+   */
+  /*--------------------------------------------------------------------------------*/
+  virtual void DeleteAllUnreferenced();
 
   /*--------------------------------------------------------------------------------*/
   /** Set default 'pure' mode value
@@ -57,8 +63,8 @@ public:
    * @note (e.g. setting type labels of referenced objects)
    */
   /*--------------------------------------------------------------------------------*/
-  void EnablePureMode(bool enable = true) {puremode = enable;}
-  bool InPureMode() const {return puremode;}
+  void EnablePureMode(bool enable = true) {ThreadLock lock(tlock); puremode = enable;}
+  bool InPureMode() const {ThreadLock lock(tlock); return puremode;}
 
   /*--------------------------------------------------------------------------------*/
   /** Finalise ADM
@@ -72,11 +78,14 @@ public:
    * @param type object type - should always be the static 'Type' member of the object to be created (e.g. ADMAudioProgramme::Type)
    * @param id unique ID for the object (or empty string to have one created)
    * @param name human-readable name of the object
+   * @param deleteifexists true to delete any object of the same type and ID that already exists, false to just return theh ptr to that object
    *
-   * @return ptr to object or NULL if type unrecognized or the object already exists
+   * @note if an object of the same ID exists and is part of the standard definitions, it is ALWAYS deleted, irrespective of deleteifexists
+   *
+   * @return ptr to object or NULL if type unrecognized
    */
   /*--------------------------------------------------------------------------------*/
-  virtual ADMObject *Create(const std::string& type, const std::string& id, const std::string& name);
+  virtual ADMObject *Create(const std::string& type, const std::string& id, const std::string& name, bool deleteifexists = false);
 
   /*--------------------------------------------------------------------------------*/
   /** Create an unique ID (temporary) for the specified object
@@ -111,8 +120,8 @@ public:
    */
   /*--------------------------------------------------------------------------------*/
   ADMAudioProgramme *CreateProgramme(const std::string& name);
-  const ADMAudioProgramme::LIST& GetAudioProgrammeList() const {return audioprogrammes;}
-  
+  const ADMAudioProgramme::LIST& GetAudioProgrammeList() const {ThreadLock lock(tlock); return audioprogrammes;}
+
   /*--------------------------------------------------------------------------------*/
   /** Create audioContent object
    *
@@ -125,7 +134,7 @@ public:
    */
   /*--------------------------------------------------------------------------------*/
   ADMAudioContent *CreateContent(const std::string& name, ADMAudioProgramme *programme = NULL);
-  const ADMAudioContent::LIST& GetAudioContentList() const {return audiocontent;}
+  const ADMAudioContent::LIST& GetAudioContentList() const {ThreadLock lock(tlock); return audiocontent;}
 
   /*--------------------------------------------------------------------------------*/
   /** Create audioObject object
@@ -139,7 +148,7 @@ public:
    */
   /*--------------------------------------------------------------------------------*/
   ADMAudioObject *CreateObject(const std::string& name, ADMAudioContent *content = NULL);
-  const ADMAudioObject::LIST& GetAudioObjectList() const {return audioobjects;}
+  const ADMAudioObject::LIST& GetAudioObjectList() const {ThreadLock lock(tlock); return audioobjects;}
 
   /*--------------------------------------------------------------------------------*/
   /** Create audioPackFormat object
@@ -230,12 +239,22 @@ public:
   void Register(ADMObject *obj);
 
   /*--------------------------------------------------------------------------------*/
+  /** Register an ADM sub-object with this ADM
+   *
+   * @param obj ptr to ADM object
+   *
+   */
+  /*--------------------------------------------------------------------------------*/
+  void DeRegister(ADMObject *obj);
+
+  /*--------------------------------------------------------------------------------*/
   /** Return the object associated with the specified reference
    *
    * @param value a name/value pair specifying object type and name
+   * @param type non-NULL overrides object type (instead of being derived from value.name)
    */
   /*--------------------------------------------------------------------------------*/
-  ADMObject *GetReference(const XMLValue& value);
+  ADMObject *GetReference(const XMLValue& value, const std::string *type = NULL);
 
   /*--------------------------------------------------------------------------------*/
   /** Get list of objects of specified type
@@ -310,7 +329,7 @@ public:
    */
   /*--------------------------------------------------------------------------------*/
   typedef std::vector<const ADMAudioTrack *> TRACKLIST;
-  const TRACKLIST& GetTrackList() const {return tracklist;}
+  const TRACKLIST& GetTrackList() const {ThreadLock lock(tlock); return tracklist;}
 
   /*--------------------------------------------------------------------------------*/
   /** Return non-ADM XML for a particular node that needs to be preserved
@@ -330,7 +349,7 @@ public:
    */
   /*--------------------------------------------------------------------------------*/
   virtual XMLValues *CreateNonADMXML(const std::string& node);
-  
+
   /*--------------------------------------------------------------------------------*/
   /** Structure containing names of ADM objects to create and connect together using CreateObjects()
    *
@@ -406,7 +425,7 @@ public:
   virtual void Dump(std::string& str, const ADMObject *obj = NULL, const std::string& indent = "  ", const std::string& eol = "\n", uint_t level = 0) const;
 
   /*--------------------------------------------------------------------------------*/
-  /** Generate a textual list of references 
+  /** Generate a textual list of references
    *
    * @param str string to be modified
    */
@@ -437,6 +456,28 @@ public:
   /*--------------------------------------------------------------------------------*/
   bool CreateFromFile(const char *filename);
 
+#if ENABLE_JSON
+  /*--------------------------------------------------------------------------------*/
+  /** Return ADM as JSON
+   */
+  /*--------------------------------------------------------------------------------*/
+  virtual void ToJSON(JSONValue& obj) const;
+
+  /*--------------------------------------------------------------------------------*/
+  /** Set ADM from a JSON object
+   *
+   * @note NOT IMPLEMENTED
+   */
+  /*--------------------------------------------------------------------------------*/
+  virtual bool FromJSON(const JSONValue& obj);
+#endif
+
+  /*--------------------------------------------------------------------------------*/
+  /** This provide a mechanism to lock this object for any ADM manipulation operations
+   */
+  /*--------------------------------------------------------------------------------*/
+  operator const ThreadLockObject& () const {return tlock;}
+
 protected:
   /*--------------------------------------------------------------------------------*/
   /** Find an unique ID given the specified format string
@@ -444,7 +485,7 @@ protected:
    * @param type object type
    * @param format C-style format string
    * @param start starting index
-   * 
+   *
    * @return unique ID
    */
   /*--------------------------------------------------------------------------------*/
@@ -483,6 +524,19 @@ protected:
   virtual void Dump(const ADMObject *obj, std::map<const ADMObject *,bool>& map, DUMPCONTEXT& context) const;
 
   /*--------------------------------------------------------------------------------*/
+  /** Dump a set of XMLValues to a string
+   *
+   * @param str string to append to
+   * @param values XMLValues to output
+   * @param indent initial indent string
+   * @param indentstep string to append to indent to increase indent by one level
+   * @param eol end of line string
+   *
+   */
+  /*--------------------------------------------------------------------------------*/
+  virtual void DumpValues(std::string& str, const XMLValues& values, std::string indent, const std::string& indentstep, const std::string& eol) const;
+
+  /*--------------------------------------------------------------------------------*/
   /** Connect XML references once all objects have been read
    */
   /*--------------------------------------------------------------------------------*/
@@ -506,14 +560,6 @@ protected:
   /*--------------------------------------------------------------------------------*/
   virtual void ChangeTemporaryIDs();
 
-#if ENABLE_JSON
-  /*--------------------------------------------------------------------------------*/
-  /** Return ADM as JSON
-   */
-  /*--------------------------------------------------------------------------------*/
-  virtual json_spirit::mObject ToJSON() const;
-#endif
-
   typedef std::map<std::string,ADMObject*> ADMOBJECTS_MAP;
   typedef ADMOBJECTS_MAP::iterator         ADMOBJECTS_IT;
   typedef ADMOBJECTS_MAP::const_iterator   ADMOBJECTS_CIT;
@@ -523,7 +569,7 @@ protected:
    */
   /*--------------------------------------------------------------------------------*/
   template<typename T>
-  void AddToList(std::vector<T*>& list, ADMObject *obj)
+  void AddToList(std::vector<T *>& list, ADMObject *obj)
   {
     T *p;
     if ((p = dynamic_cast<T *>(obj)) != NULL) list.push_back(p);
@@ -540,7 +586,40 @@ protected:
     if ((p = dynamic_cast<const T *>(obj)) != NULL) list.push_back(p);
   }
 
+  /*--------------------------------------------------------------------------------*/
+  /** Try to remove object from list by checking type using dynamic casting
+   */
+  /*--------------------------------------------------------------------------------*/
+  template<typename T>
+  void RemoveFromList(std::vector<T *>& list, ADMObject *obj)
+  {
+    typename std::vector<T *>::iterator it;
+    T *p;
+    if (((p = dynamic_cast<T *>(obj)) != NULL) &&
+        ((it = std::find(list.begin(), list.end(), p)) != list.end()))
+    {
+      list.erase(it);
+    }
+  }
+
+  /*--------------------------------------------------------------------------------*/
+  /** Try to remove object from list by checking type using dynamic casting
+   */
+  /*--------------------------------------------------------------------------------*/
+  template<typename T>
+  void RemoveFromList(std::vector<const T *>& list, ADMObject *obj)
+  {
+    typename std::vector<const T *>::iterator it;
+    const T *p;
+    if (((p = dynamic_cast<const T *>(obj)) != NULL) &&
+        ((it = std::find(list.begin(), list.end(), p)) != list.end()))
+    {
+      list.erase(it);
+    }
+  }
+
 protected:
+  ThreadLockObject                tlock;
   ADMAudioProgramme::LIST         audioprogrammes;
   ADMAudioContent::LIST           audiocontent;
   ADMAudioObject::LIST            audioobjects;

@@ -69,32 +69,6 @@ public:
    */
   /*--------------------------------------------------------------------------------*/
   virtual void EndChanges() {}
-
-#if ENABLE_JSON
-  /*--------------------------------------------------------------------------------*/
-  /** Convert parameters to a JSON object
-   */
-  /*--------------------------------------------------------------------------------*/
-  virtual json_spirit::mObject ToJSON() const {json_spirit::mObject obj; obj["parameters"] = ToJSONArray(); return obj;}
-
-  /*--------------------------------------------------------------------------------*/
-  /** Convert parameters to a JSON array
-   */
-  /*--------------------------------------------------------------------------------*/
-  virtual json_spirit::mArray ToJSONArray() const {json_spirit::mArray array; return array;}
-
-  /*--------------------------------------------------------------------------------*/
-  /** Operator overload
-   */
-  /*--------------------------------------------------------------------------------*/
-  operator json_spirit::mObject() const {return ToJSON();}
- 
-  /*--------------------------------------------------------------------------------*/
-  /** Convert parameters to a JSON string
-   */
-  /*--------------------------------------------------------------------------------*/
-  std::string ToJSONString() const {return json_spirit::write(ToJSON(), json_spirit::pretty_print);}
-#endif
 };
 
 BBC_AUDIOTOOLBOX_END

@@ -34,21 +34,22 @@ ADMData::~ADMData()
 /*--------------------------------------------------------------------------------*/
 void ADMData::Copy(const ADMData& obj)
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_MAP::const_iterator it;
 
   Delete();
-  
+
   uniqueids = obj.uniqueids;
   nonadmxml = obj.nonadmxml;
   puremode  = obj.puremode;
- 
+
   // 1st pass: copy all objects
   for (it = obj.admobjects.begin(); it != obj.admobjects.end(); ++it)
   {
     const ADMObject    *oldobj = it->second;
     const std::string& type    = oldobj->GetType();
     ADMObject *newobj = NULL;
-    
+
     if      (type == ADMAudioProgramme::Type)     newobj = new ADMAudioProgramme(*this, dynamic_cast<const ADMAudioProgramme *>(oldobj));
     else if (type == ADMAudioContent::Type)       newobj = new ADMAudioContent(*this, dynamic_cast<const ADMAudioContent *>(oldobj));
     else if (type == ADMAudioObject::Type)        newobj = new ADMAudioObject(*this, dynamic_cast<const ADMAudioObject *>(oldobj));
@@ -85,21 +86,49 @@ void ADMData::Copy(const ADMData& obj)
 /*--------------------------------------------------------------------------------*/
 void ADMData::Delete()
 {
-  ADMOBJECTS_IT it;
-
-  for (it = admobjects.begin(); it != admobjects.end(); ++it)
-  {
-    delete it->second;
-  }
-
+  ThreadLock lock(tlock);
   audioprogrammes.clear();
   audiocontent.clear();
   audioobjects.clear();
-  
-  admobjects.clear();
+
   tracklist.clear();
   uniqueids.clear();
   nonadmxml.clear();
+
+  // IMPORTANT!
+  // each object removes itself from the admobjects map so this loop only ever deals with the begin() item!
+  while (admobjects.begin() != admobjects.end())
+  {
+    ADMObject *obj = admobjects.begin()->second;
+
+    BBCDEBUG3(("Deleting %s<%s>", obj->GetMapEntryID().c_str(), StringFrom(obj).c_str()));
+
+    delete obj;
+  }
+}
+
+/*--------------------------------------------------------------------------------*/
+/** Delete all objects within this ADM that are not referenced
+ */
+/*--------------------------------------------------------------------------------*/
+void ADMData::DeleteAllUnreferenced()
+{
+  ThreadLock lock(tlock);
+  ADMOBJECTS_IT it;
+
+  for (it = admobjects.begin(); it != admobjects.end();)
+  {
+    ADMObject *obj = it->second;
+
+    // audioProgramme object aren't referenced as they are the top of the tree!
+    if ((obj->GetType() != ADMAudioProgramme::Type) && obj->Unreferenced())
+    {
+      BBCDEBUG2(("Deleting object '%s' because it is not referenced by anything", it->first.c_str()));
+      // this will remove the object from the map as well!
+      delete it->second;
+    }
+    else ++it;
+  }
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -108,6 +137,7 @@ void ADMData::Delete()
 /*--------------------------------------------------------------------------------*/
 void ADMData::Finalise()
 {
+  ThreadLock lock(tlock);
   std::vector<ADMObject *> channelformats;
   uint_t i;
 
@@ -122,7 +152,7 @@ void ADMData::Finalise()
     ADMAudioChannelFormat *cf = dynamic_cast<ADMAudioChannelFormat *>(channelformats[i]);
     if (cf) cf->SortBlockFormats();
   }
-  
+
   BBCDEBUG2(("Connecting references..."));
   ConnectReferences();
 
@@ -139,6 +169,8 @@ void ADMData::Finalise()
 /*--------------------------------------------------------------------------------*/
 void ADMData::Register(ADMObject *obj)
 {
+  ThreadLock lock(tlock);
+
   admobjects[obj->GetMapEntryID()] = obj;
 
   // add object to specialised lists
@@ -148,6 +180,26 @@ void ADMData::Register(ADMObject *obj)
   AddToList<ADMAudioObject>(audioobjects, obj);
 
   obj->SetReferences();
+}
+
+/*--------------------------------------------------------------------------------*/
+/** Register an ADM sub-object with this ADM
+ *
+ * @param obj ptr to ADM object
+ *
+ */
+/*--------------------------------------------------------------------------------*/
+void ADMData::DeRegister(ADMObject *obj)
+{
+  ThreadLock lock(tlock);
+  ADMOBJECTS_IT it;
+
+  if ((it = admobjects.find(obj->GetMapEntryID())) != admobjects.end()) admobjects.erase(it);
+
+  RemoveFromList<ADMAudioTrack>(tracklist, obj);
+  RemoveFromList<ADMAudioProgramme>(audioprogrammes, obj);
+  RemoveFromList<ADMAudioContent>(audiocontent, obj);
+  RemoveFromList<ADMAudioObject>(audioobjects, obj);
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -172,25 +224,37 @@ bool ADMData::ValidType(const std::string& type) const
  * @param type object type - should always be the static 'Type' member of the object to be created (e.g. ADMAudioProgramme::Type)
  * @param id unique ID for the object (or empty string to create one using CreateID())
  * @param name human-readable name of the object
+ * @param deleteifexists true to delete any object of the same type and ID that already exists, false to just return theh ptr to that object
  *
- * @return ptr to object or NULL if type unrecognized or the object already exists
+ * @note if an object of the same ID exists and is part of the standard definitions, it is ALWAYS deleted, irrespective of deleteifexists
+ *
+ * @return ptr to object or NULL if type unrecognized
  */
 /*--------------------------------------------------------------------------------*/
-ADMObject *ADMData::Create(const std::string& type, const std::string& id, const std::string& name)
+ADMObject *ADMData::Create(const std::string& type, const std::string& id, const std::string& name, bool deleteifexists)
 {
+  ThreadLock lock(tlock);
   ADMObject *obj = NULL;
 
   if (ValidType(type))
   {
-    ADMOBJECTS_CIT it;
+    ADMOBJECTS_IT it;
     // if id is empty, create one
     std::string id1  = (!id.empty() ? id : CreateID(type));
     std::string uuid = type + "/" + id1;
 
     // ensure the id doesn't already exist
+    if (((it = admobjects.find(uuid)) != admobjects.end()) && (deleteifexists || it->second->IsStandardDefinition()))
+    {
+      // delete any existing object of the same ID -> this will remove itself from the above map
+      BBCDEBUG3(("Warning: deleting %s when creating new object of type %s ID %s", it->second->ToString().c_str(), type.c_str(), uuid.c_str()));
+      delete it->second;
+    }
+
+    // only create if it doesn't exist
     if ((it = admobjects.find(uuid)) == admobjects.end())
     {
-      BBCDEBUG3(("Creating %s ID %s Name %s UUID %s", type.c_str(), id1.c_str(), name.c_str(), uuid.c_str())); 
+      BBCDEBUG3(("Creating %s ID %s Name %s UUID %s", type.c_str(), id1.c_str(), name.c_str(), uuid.c_str()));
 
       if      (type == ADMAudioProgramme::Type)     obj = new ADMAudioProgramme(*this, id1, name);
       else if (type == ADMAudioContent::Type)       obj = new ADMAudioContent(*this, id1, name);
@@ -204,7 +268,7 @@ ADMObject *ADMData::Create(const std::string& type, const std::string& id, const
         // create track and assign next available track number to it
         ADMAudioTrack *track;
         uint_t tn = GetNextTrackNum();
-        
+
         if ((track = new ADMAudioTrack(*this, id1)) != NULL)
         {
           track->SetTrackNum(tn);
@@ -217,6 +281,7 @@ ADMObject *ADMData::Create(const std::string& type, const std::string& id, const
         BBCERROR("Cannot create type '%s'", type.c_str());
       }
     }
+    // return existing object
     else obj = it->second;
   }
 
@@ -301,7 +366,7 @@ std::string ADMData::CreateID(const std::string& type)
     else id = FindUniqueID(type, format, start);
   }
 
-  BBCDEBUG3(("Created ID %s for type %s", id.c_str(), type.c_str())); 
+  BBCDEBUG3(("Created ID %s for type %s", id.c_str(), type.c_str()));
 
   return id;
 }
@@ -406,7 +471,7 @@ void ADMData::ChangeTemporaryIDs()
   std::map<ADMObject *,bool> map;
   ADMOBJECTS_IT it;
   uint_t i;
-  
+
   // cycle through each of the types above
   for (i = 0; i < NUMBEROF(types); i++)
   {
@@ -435,6 +500,7 @@ void ADMData::ChangeTemporaryIDs()
 /*--------------------------------------------------------------------------------*/
 ADMAudioProgramme *ADMData::CreateProgramme(const std::string& name)
 {
+  ThreadLock lock(tlock);
   return new ADMAudioProgramme(*this, CreateID(ADMAudioProgramme::Type), name);
 }
 
@@ -451,6 +517,7 @@ ADMAudioProgramme *ADMData::CreateProgramme(const std::string& name)
 /*--------------------------------------------------------------------------------*/
 ADMAudioContent *ADMData::CreateContent(const std::string& name, ADMAudioProgramme *programme)
 {
+  ThreadLock lock(tlock);
   ADMAudioContent *content;
 
   if ((content = new ADMAudioContent(*this, CreateID(ADMAudioContent::Type), name)) != NULL)
@@ -474,6 +541,7 @@ ADMAudioContent *ADMData::CreateContent(const std::string& name, ADMAudioProgram
 /*--------------------------------------------------------------------------------*/
 ADMAudioObject *ADMData::CreateObject(const std::string& name, ADMAudioContent *content)
 {
+  ThreadLock lock(tlock);
   ADMAudioObject *object;
 
   if ((object = new ADMAudioObject(*this, CreateID(ADMAudioObject::Type), name)) != NULL)
@@ -497,6 +565,7 @@ ADMAudioObject *ADMData::CreateObject(const std::string& name, ADMAudioContent *
 /*--------------------------------------------------------------------------------*/
 ADMAudioPackFormat *ADMData::CreatePackFormat(const std::string& name, ADMAudioObject *object)
 {
+  ThreadLock lock(tlock);
   ADMAudioPackFormat *packFormat;
 
   if ((packFormat = new ADMAudioPackFormat(*this, CreateID(ADMAudioPackFormat::Type), name)) != NULL)
@@ -513,6 +582,7 @@ ADMAudioPackFormat *ADMData::CreatePackFormat(const std::string& name, ADMAudioO
 /*--------------------------------------------------------------------------------*/
 uint_t ADMData::GetNextTrackNum() const
 {
+  ThreadLock lock(tlock);
   uint_t i, trackNum = 0;
 
   for (i = 0; i < tracklist.size(); i++)
@@ -521,7 +591,7 @@ uint_t ADMData::GetNextTrackNum() const
   }
 
   BBCDEBUG3(("GetNextTrackNum with tracklist of %u items is %u", (uint_t)tracklist.size(), trackNum));
-  
+
   return trackNum;
 }
 
@@ -538,6 +608,7 @@ uint_t ADMData::GetNextTrackNum() const
 /*--------------------------------------------------------------------------------*/
 ADMAudioTrack *ADMData::CreateTrack(uint_t trackNum, ADMAudioObject *object)
 {
+  ThreadLock lock(tlock);
   ADMAudioTrack *track;
 
   // pick next track number
@@ -546,7 +617,7 @@ ADMAudioTrack *ADMData::CreateTrack(uint_t trackNum, ADMAudioObject *object)
   if ((track = new ADMAudioTrack(*this, CreateID(ADMAudioTrack::Type))) != NULL)
   {
     track->SetTrackNum(trackNum);
-    
+
     if (object) object->Add(track);
   }
 
@@ -567,6 +638,7 @@ ADMAudioTrack *ADMData::CreateTrack(uint_t trackNum, ADMAudioObject *object)
 /*--------------------------------------------------------------------------------*/
 ADMAudioChannelFormat *ADMData::CreateChannelFormat(const std::string& name, ADMAudioPackFormat *packFormat, ADMAudioStreamFormat *streamFormat)
 {
+  ThreadLock lock(tlock);
   ADMAudioChannelFormat *channelFormat;
 
   if ((channelFormat = new ADMAudioChannelFormat(*this, CreateID(ADMAudioChannelFormat::Type), name)) != NULL)
@@ -590,6 +662,7 @@ ADMAudioChannelFormat *ADMData::CreateChannelFormat(const std::string& name, ADM
 /*--------------------------------------------------------------------------------*/
 ADMAudioBlockFormat *ADMData::CreateBlockFormat(ADMAudioChannelFormat *channelFormat)
 {
+  ThreadLock lock(tlock);
   ADMAudioBlockFormat *blockFormat;
 
   if ((blockFormat = new ADMAudioBlockFormat) != NULL)
@@ -613,6 +686,7 @@ ADMAudioBlockFormat *ADMData::CreateBlockFormat(ADMAudioChannelFormat *channelFo
 /*--------------------------------------------------------------------------------*/
 ADMAudioTrackFormat *ADMData::CreateTrackFormat(const std::string& name, ADMAudioStreamFormat *streamFormat)
 {
+  ThreadLock lock(tlock);
   ADMAudioTrackFormat *trackFormat;
 
   if ((trackFormat = new ADMAudioTrackFormat(*this, CreateID(ADMAudioTrackFormat::Type), name)) != NULL)
@@ -640,6 +714,7 @@ ADMAudioTrackFormat *ADMData::CreateTrackFormat(const std::string& name, ADMAudi
 /*--------------------------------------------------------------------------------*/
 ADMAudioStreamFormat *ADMData::CreateStreamFormat(const std::string& name, ADMAudioTrackFormat *trackFormat)
 {
+  ThreadLock lock(tlock);
   ADMAudioStreamFormat *streamFormat;
 
   if ((streamFormat = new ADMAudioStreamFormat(*this, CreateID(ADMAudioStreamFormat::Type), name)) != NULL)
@@ -658,38 +733,47 @@ ADMAudioStreamFormat *ADMData::CreateStreamFormat(const std::string& name, ADMAu
 /** Return the object associated with the specified reference
  *
  * @param value a name/value pair specifying object type and name
+ * @param type non-NULL overrides object type (instead of being derived from value.name)
  */
 /*--------------------------------------------------------------------------------*/
-ADMObject *ADMData::GetReference(const XMLValue& value)
+ADMObject *ADMData::GetReference(const XMLValue& value, const std::string *type)
 {
+  ThreadLock lock(tlock);
   ADMObject *obj = NULL;
   ADMOBJECTS_CIT it;
   std::string uuid = value.name, cmp;
 
-  cmp = "UIDRef";
-  if ((uuid.size() >= cmp.size()) && (uuid.compare(uuid.size() - cmp.size(), cmp.size(), cmp) == 0))
-  {
-    uuid = uuid.substr(0, uuid.size() - 3);
-  }
+  BBCDEBUG4(("Getting reference %s / %s", type ? type.c_str() : value.name.c_str(), value.value.c_str()));
+
+  // aloow type to override type to search for
+  if (type) uuid = *type;
   else
   {
-    cmp = "IDRef";
+    cmp = "UIDRef";
     if ((uuid.size() >= cmp.size()) && (uuid.compare(uuid.size() - cmp.size(), cmp.size(), cmp) == 0))
     {
-      uuid = uuid.substr(0, uuid.size() - cmp.size());
+      uuid = uuid.substr(0, uuid.size() - 3);
+    }
+    else
+    {
+      cmp = "IDRef";
+      if ((uuid.size() >= cmp.size()) && (uuid.compare(uuid.size() - cmp.size(), cmp.size(), cmp) == 0))
+      {
+        uuid = uuid.substr(0, uuid.size() - cmp.size());
+      }
     }
   }
-
+  
   uuid += "/" + value.value;
 
   if ((it = admobjects.find(uuid)) != admobjects.end()) obj = it->second;
   else
   {
 #if BBCDEBUG_LEVEL >= 4
-    BBCDEBUG1(("Failed to find reference '%s', object list:", uuid.c_str()));
+    BBCDEBUG("Failed to find reference '%s', object list:", uuid.c_str());
     for (it = admobjects.begin(); it != admobjects.end(); ++it)
     {
-      BBCDEBUG1(("\t%s / %s (%u / %u)%s", it->first.c_str(), uuid.c_str(), (uint_t)it->first.size(), (uint_t)uuid.size(), (it->first == uuid) ? " *" : ""));
+      BBCDEBUG("\t%s%s", it->first.c_str(), (it->first == uuid) ? " *" : "");
     }
 #endif
   }
@@ -703,15 +787,17 @@ ADMObject *ADMData::GetReference(const XMLValue& value)
 /*--------------------------------------------------------------------------------*/
 void ADMData::SortTracks()
 {
+  ThreadLock lock(tlock);
+
   sort(tracklist.begin(), tracklist.end(), ADMAudioTrack::Compare);
 
 #if BBCDEBUG_LEVEL >= 4
   std::vector<const ADMAudioTrack *>::const_iterator it;
 
-  BBCDEBUG1(("%lu tracks:", tracklist.size()));
+  BBCDEBUG("%lu tracks:", tracklist.size());
   for (it = tracklist.begin(); it != tracklist.end(); ++it)
   {
-    BBCDEBUG1(("%u: %s", (*it)->GetTrackNum(), (*it)->ToString().c_str()));
+    BBCDEBUG("%u: %s", (*it)->GetTrackNum(), (*it)->ToString().c_str());
   }
 #endif
 }
@@ -722,6 +808,7 @@ void ADMData::SortTracks()
 /*--------------------------------------------------------------------------------*/
 void ADMData::ConnectReferences()
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_IT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -741,6 +828,7 @@ void ADMData::ConnectReferences()
 /*--------------------------------------------------------------------------------*/
 void ADMData::GenerateReferenceMap(ADMREFERENCEMAP& refmap, const std::string& type1, const std::string& type2, bool reversed) const
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_CIT it;
   uint_t i;
 
@@ -782,6 +870,7 @@ void ADMData::GenerateReferenceMap(ADMREFERENCEMAP& refmap, const std::string& t
 /*--------------------------------------------------------------------------------*/
 void ADMData::UpdateAudioObjectLimits()
 {
+  ThreadLock lock(tlock);
   ADMREFERENCEMAP channelformats;
   ADMOBJECTS_IT it;
   uint_t i;
@@ -886,6 +975,7 @@ void ADMData::UpdateAudioObjectLimits()
 /*--------------------------------------------------------------------------------*/
 void ADMData::GetObjects(const std::string& type, std::vector<const ADMObject *>& list) const
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_CIT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -908,6 +998,7 @@ void ADMData::GetObjects(const std::string& type, std::vector<const ADMObject *>
 /*--------------------------------------------------------------------------------*/
 void ADMData::GetWritableObjects(const std::string& type, std::vector<ADMObject *>& list) const
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_CIT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -929,6 +1020,7 @@ void ADMData::GetWritableObjects(const std::string& type, std::vector<ADMObject 
 /*--------------------------------------------------------------------------------*/
 const ADMObject *ADMData::GetObjectByID(const std::string& id, const std::string& type) const
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_CIT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -949,6 +1041,7 @@ const ADMObject *ADMData::GetObjectByID(const std::string& id, const std::string
 /*--------------------------------------------------------------------------------*/
 const ADMObject *ADMData::GetObjectByName(const std::string& name, const std::string& type) const
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_CIT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -969,6 +1062,7 @@ const ADMObject *ADMData::GetObjectByName(const std::string& name, const std::st
 /*--------------------------------------------------------------------------------*/
 ADMObject *ADMData::GetWritableObjectByID(const std::string& id, const std::string& type)
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_IT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -989,6 +1083,7 @@ ADMObject *ADMData::GetWritableObjectByID(const std::string& id, const std::stri
 /*--------------------------------------------------------------------------------*/
 ADMObject *ADMData::GetWritableObjectByName(const std::string& name, const std::string& type)
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_IT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -1008,6 +1103,7 @@ ADMObject *ADMData::GetWritableObjectByName(const std::string& name, const std::
 /*--------------------------------------------------------------------------------*/
 void ADMData::GetAudioObjectList(std::vector<const ADMAudioObject *>& list) const
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_CIT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -1028,7 +1124,7 @@ const XMLValues *ADMData::GetNonADMXML(const std::string& node) const
   const XMLValues *values = NULL;
 
   if ((it = nonadmxml.find(node)) != nonadmxml.end()) values = &it->second;
-  
+
   return values;
 }
 
@@ -1044,13 +1140,14 @@ const XMLValues *ADMData::GetNonADMXML(const std::string& node) const
 /*--------------------------------------------------------------------------------*/
 XMLValues *ADMData::CreateNonADMXML(const std::string& node)
 {
+  ThreadLock lock(tlock);
   std::map<std::string,XMLValues>::iterator it;
   XMLValues *values = NULL;
 
   // find or create
   if ((it = nonadmxml.find(node)) != nonadmxml.end()) values = &it->second;
   else                                                values = &nonadmxml[node];
-  
+
   return values;
 }
 
@@ -1066,6 +1163,7 @@ XMLValues *ADMData::CreateNonADMXML(const std::string& node)
 /*--------------------------------------------------------------------------------*/
 void ADMData::Dump(std::string& str, const ADMObject *obj, const std::string& indent, const std::string& eol, uint_t level) const
 {
+  ThreadLock lock(tlock);
   std::map<const ADMObject *,bool> map;
   DUMPCONTEXT    context;
   ADMOBJECTS_CIT it;
@@ -1097,6 +1195,50 @@ void ADMData::Dump(std::string& str, const ADMObject *obj, const std::string& in
 }
 
 /*--------------------------------------------------------------------------------*/
+/** Dump a set of XMLValues to a string
+ *
+ * @param str string to append to
+ * @param values XMLValues to output
+ * @param indent initial indent string
+ * @param indentstep string to append to indent to increase indent by one level
+ * @param eol end of line string
+ *
+ */
+/*--------------------------------------------------------------------------------*/
+void ADMData::DumpValues(std::string& str, const XMLValues& values, std::string indent, const std::string& indentstep, const std::string& eol) const
+{
+  uint_t i;
+    
+  for (i = 0; i < values.size(); i++)
+  {
+    const XMLValue& value = values[i];
+
+    if (!value.name.empty())
+    {
+      Printf(str, "%s%s", indent.c_str(), value.name.c_str());
+
+      if (value.attrs.end() != value.attrs.begin())
+      {
+        XMLValue::ATTRS::const_iterator it;
+        
+        Printf(str, " (");
+        for (it = value.attrs.begin(); it != value.attrs.end(); ++it)
+        {
+          if (it != value.attrs.begin()) Printf(str, ", ");
+          Printf(str, "%s=%s", it->first.c_str(), it->second.c_str());
+        }
+        Printf(str, ")");
+      }
+
+      Printf(str, ": %s%s", value.value.c_str(), eol.c_str());
+
+      const XMLValues *subvalues = value.GetSubValues();
+      if (subvalues) DumpValues(str, *subvalues, indent + indentstep, indentstep, eol);
+    }
+  }
+}
+
+/*--------------------------------------------------------------------------------*/
 /** Generate textual description of ADM object (recursive
  *
  * @param obj ADM object
@@ -1106,6 +1248,7 @@ void ADMData::Dump(std::string& str, const ADMObject *obj, const std::string& in
 /*--------------------------------------------------------------------------------*/
 void ADMData::Dump(const ADMObject *obj, std::map<const ADMObject *,bool>& map, DUMPCONTEXT& context) const
 {
+  ThreadLock lock(tlock);
   std::vector<ADMObject::REFERENCEDOBJECT> objects;
   XMLValues values;
   std::string& str = context.str;
@@ -1126,44 +1269,30 @@ void ADMData::Dump(const ADMObject *obj, std::map<const ADMObject *,bool>& map, 
     Printf(str, " / %s", obj->GetName().c_str());
   }
 
+  // first entry is attributes for object
+  if (values.size() && values[0].name.empty())
+  {
+    const XMLValue& value = values[0];
+
+    if (value.attrs.end() != value.attrs.begin())
+    {
+      XMLValue::ATTRS::const_iterator it;
+      
+      Printf(str, " (");
+      for (it = value.attrs.begin(); it != value.attrs.end(); ++it)
+      {
+        if (it != value.attrs.begin()) Printf(str, ", ");
+        Printf(str, "%s=%s", it->first.c_str(), it->second.c_str());
+      }
+      Printf(str, ")");
+    }
+  }
+  
   str    += context.eol;
   indent += context.indent;
 
-  // output attributes
-  for (i = 0; i < values.size(); i++)
-  {
-    const XMLValue& value = values[i];
-
-    if (value.attr)
-    {
-      Printf(str, "%s%s: %s%s", indent.c_str(), value.name.c_str(), value.value.c_str(), context.eol.c_str());
-    }
-  }
-
   // output values
-  for (i = 0; i < values.size(); i++)
-  {
-    const XMLValue& value = values[i];
-
-    if (!value.attr)
-    {
-      XMLValue::ATTRS::const_iterator it;
-
-      Printf(str, "%s%s", indent.c_str(), value.name.c_str());
-
-      if (value.attrs.end() != value.attrs.begin())
-      {
-        Printf(str, " (");
-        for (it = value.attrs.begin(); it != value.attrs.end(); ++it)
-        {
-          Printf(str, "%s=%s", it->first.c_str(), it->second.c_str());
-        }
-        Printf(str, ")");
-      }
-
-      Printf(str, ": %s%s", value.value.c_str(), context.eol.c_str());
-    }
-  }
+  DumpValues(str, values, indent, context.indent, context.eol);
 
   // output references
   for (i = 0; i < objects.size(); i++)
@@ -1200,10 +1329,11 @@ void ADMData::Dump(const ADMObject *obj, std::map<const ADMObject *,bool>& map, 
 /*--------------------------------------------------------------------------------*/
 void ADMData::GetReferencedObjects(std::vector<const ADMObject *>& list) const
 {
+  ThreadLock lock(tlock);
   uint_t i, j;
 
   // for loop with expanding list which collects referenced objects as it goes
-  for (i = 0; i < list.size(); i++)
+  for (i = 0; i < (uint_t)list.size(); i++)
   {
     std::vector<ADMObject::REFERENCEDOBJECT> objects;
     const ADMObject *obj = list[i];
@@ -1212,13 +1342,19 @@ void ADMData::GetReferencedObjects(std::vector<const ADMObject *>& list) const
     // collect values and references for this object
     obj->GetValuesAndReferences(values, objects);
 
+    BBCDEBUG2(("Looking for referenced objects in %s", obj->ToString().c_str()));
+
     // for each object, add it to the list if it has not already in the map
-    for (j = 0; j < objects.size(); j++)
+    for (j = 0; j < (uint_t)objects.size(); j++)
     {
       const ADMObject::REFERENCEDOBJECT& object = objects[j];
 
+      BBCDEBUG2(("Object %s referenced object %u/%u is %s", obj->ToString().c_str(), j, (uint_t)objects.size(), object.obj->ToString().c_str()));
+
       if (std::find(list.begin(), list.end(), object.obj) == list.end())
       {
+        BBCDEBUG3(("Adding object %s to list", object.obj->ToString().c_str()));
+        
         // add it to the list to be processed
         list.push_back(object.obj);
       }
@@ -1234,6 +1370,7 @@ void ADMData::GetReferencedObjects(std::vector<const ADMObject *>& list) const
 /*--------------------------------------------------------------------------------*/
 void ADMData::GenerateReferenceList(std::string& str) const
 {
+  ThreadLock lock(tlock);
   ADMOBJECTS_CIT it;
 
   for (it = admobjects.begin(); it != admobjects.end(); ++it)
@@ -1254,6 +1391,7 @@ void ADMData::GenerateReferenceList(std::string& str) const
 /*--------------------------------------------------------------------------------*/
 bool ADMData::CreateObjects(OBJECTNAMES& names)
 {
+  ThreadLock lock(tlock);
   bool success = true;
 
   // clear object pointers
@@ -1441,6 +1579,7 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
 /*--------------------------------------------------------------------------------*/
 bool ADMData::CreateFromFile(const char *filename)
 {
+  ThreadLock lock(tlock);
   EnhancedFile fp;
   bool success = false;
 
@@ -1539,10 +1678,10 @@ bool ADMData::CreateFromFile(const char *filename)
 /** Return ADM as JSON
  */
 /*--------------------------------------------------------------------------------*/
-json_spirit::mObject ADMData::ToJSON() const
+void ADMData::ToJSON(JSONValue& obj) const
 {
-  json_spirit::mObject obj;
-  json_spirit::mArray  array;
+  ThreadLock lock(tlock);
+  JSONValue array;
 
   // get list of ADMAudioObjects
   std::vector<const ADMObject *> list;
@@ -1566,21 +1705,34 @@ json_spirit::mObject ADMData::ToJSON() const
 
         for (bid = 0; bid < blockformats->size(); bid++)
         {
-          json_spirit::mObject obj;
+          JSONValue obj;
 
           obj["object"]   = object->GetID();
           obj["reltrack"] = (sint_t)trackNum - (sint_t)object->GetStartChannel();
           (*blockformats)[bid]->ToJSON(obj);
 
-          array.push_back(obj);
+          array.append(obj);
         }
       }
     }
   }
 
   obj["channels"] = array;
+}
 
-  return obj;
+/*--------------------------------------------------------------------------------*/
+/** Set parameters from a JSON object
+ *
+ * @note NOT IMPLEMENTED
+ */
+/*--------------------------------------------------------------------------------*/
+bool ADMData::FromJSON(const JSONValue& obj)
+{
+  bool success = false;
+
+  UNUSED_PARAMETER(obj);
+  
+  return success;
 }
 #endif
 

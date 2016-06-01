@@ -1,5 +1,5 @@
 AC_PREREQ([2.68])
-AC_INIT([BBCAT_ADM],[0.1.2.1])
+AC_INIT([BBCAT_ADM],[0.1.2.2])
 
 AS_NANO(BBCAT_ADM_CVS=no,BBCAT_ADM_CVS=yes)
 
@@ -45,8 +45,6 @@ if test "x$exec_prefix" = "xNONE" ; then
   exec_prefix=$prefix
 fi
 
-BBCAT_GLOBAL_ADM_CFLAGS="$BBCAT_GLOBAL_ADM_CFLAGS -DBBCAT_ADM_DATA_FILES=\\\"${prefix}/share/$PACKAGE\\\""
-
 # Check if we should disable optimization  (./configure --disable-opt)
 AC_MSG_CHECKING(whether to disable optimization)
 AC_ARG_ENABLE(opt, AS_HELP_STRING([--disable-opt], [disable optimzation]), DISABLE_OPTIMIZATION="yes", DISABLE_OPTIMIZATION="no")
@@ -61,14 +59,14 @@ AC_SUBST(CFLAGS)
 AC_SUBST(CXXFLAGS)
 
 dnl bbcat-base is required
-BBCAT_BASE_VER="0.1.2.1"
+BBCAT_BASE_VER="0.1.2.0"
 PKG_CHECK_MODULES(BBCAT_BASE, bbcat-base-0.1 >= $BBCAT_BASE_VER, HAVE_BBCAT_BASE=yes, HAVE_BBCAT_BASE=no)
 if test "x${HAVE_BBCAT_BASE}" != xyes ; then
   AC_MSG_ERROR([bbcat-base-0.1 >= $BBCAT_BASE_VER is required])
 fi
 
 dnl bbcat-dsp is required
-BBCAT_DSP_VER="0.1.2.1"
+BBCAT_DSP_VER="0.1.2.0"
 PKG_CHECK_MODULES(BBCAT_DSP, bbcat-dsp-0.1 >= $BBCAT_DSP_VER, HAVE_BBCAT_DSP=yes, HAVE_BBCAT_DSP=no)
 if test "x${HAVE_BBCAT_DSP}" != xyes ; then
   AC_MSG_ERROR([bbcat-dsp-0.1 >= $BBCAT_DSP_VER is required])
@@ -104,7 +102,13 @@ AC_APPEND_SUPPORTED_CFLAGS(BBCAT_ADM_CFLAGS, [-Werror])
 AC_APPEND_SUPPORTED_CFLAGS(BBCAT_ADM_CFLAGS, [-Wextra])
 AC_APPEND_SUPPORTED_CFLAGS(BBCAT_ADM_CFLAGS, [-msse2])
 
+AC_LANG_PUSH([C++])
+AC_APPEND_SUPPORTED_CFLAGS(BBCAT_ADM_CXXFLAGS, [-std=c++11])
+AC_LANG_POP([C++])
+
 AC_SUBST(BBCAT_ADM_CFLAGS)
+
+AC_SUBST([AM_CXXFLAGS],["$AM_CXXFLAGS $BBCAT_ADM_CXXFLAGS"])
 
 BBCAT_ADM_LDFLAGS=""
 AC_APPEND_SUPPORTED_LDFLAGS(BBCAT_ADM_LDFLAGS, [-Wl,--no-undefined])
@@ -126,5 +130,6 @@ Makefile
 bbcat-adm-uninstalled.pc
 bbcat-adm.pc
 src/Makefile
+test/Makefile
 ])
 AC_OUTPUT

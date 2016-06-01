@@ -1,3 +1,13 @@
+bbcat-adm (0.1.2.2) quantal; urgency=low
+
+  * Added support for new CMake build mechanism
+  * Added explicit library registration function (see README)
+  * Added support for locking ADM and deletion of ADM objects
+  * Added support for arbitrary depth for XML structures
+  * Added support for examining and adding extra XML to ADM objects
+
+ -- Richard Day <richard.day@bbc.co.uk>  Thu, 28 Apr 2016 10:00:00 +0000
+
 bbcat-adm (0.1.2.1) quantal; urgency=low
 
   * Moved bbcat-audioobjects library to bbcat-adm to better represent its purpose
