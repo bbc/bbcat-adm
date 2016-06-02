@@ -17,6 +17,7 @@ set(_headers
 	AudioObjectCursor.h
 	AudioObjectParameters.h
 	XMLValue.h
+	register.h
 )
 
 # auto-generate register.cpp
