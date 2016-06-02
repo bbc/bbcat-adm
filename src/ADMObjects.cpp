@@ -414,7 +414,7 @@ void ADMObject::CopyReferencesEx(std::vector<T *>& dst, const std::vector<T *>& 
         typename std::vector<T *>::const_iterator it;
 
         // ensure object is not already in the list
-        if ((it = find(dst.begin(), dst.end(), obj2)) != dst.end())
+        if ((it = find(dst.begin(), dst.end(), obj2)) == dst.end())
         {
           dst.push_back(obj2);
           // add a reference back to this object
