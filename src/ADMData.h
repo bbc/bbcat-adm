@@ -473,10 +473,35 @@ public:
 #endif
 
   /*--------------------------------------------------------------------------------*/
+  /** Return number of errors found during operations
+   */
+  /*--------------------------------------------------------------------------------*/
+  uint_t GetErrorCount() const {return (uint_t)errors.size();}
+
+  /*--------------------------------------------------------------------------------*/
+  /** Get textual list of errors found during operations
+   */
+  /*--------------------------------------------------------------------------------*/
+  const std::vector<std::string>& GetErrors() const {return errors;}
+  
+  /*--------------------------------------------------------------------------------*/
+  /** Reset errors
+   */
+  /*--------------------------------------------------------------------------------*/
+  virtual void ResetErrors() {errors.clear();}
+  
+  /*--------------------------------------------------------------------------------*/
   /** This provide a mechanism to lock this object for any ADM manipulation operations
    */
   /*--------------------------------------------------------------------------------*/
   operator const ThreadLockObject& () const {return tlock;}
+
+  /*--------------------------------------------------------------------------------*/
+  /** Log an error internally and output through normal error logging mechanism
+   */
+  /*--------------------------------------------------------------------------------*/
+  void LogError(const char *fmt, ...);
+  void LogErrorV(const char *fmt, va_list ap);
 
 protected:
   /*--------------------------------------------------------------------------------*/
@@ -617,7 +642,7 @@ protected:
       list.erase(it);
     }
   }
-
+  
 protected:
   ThreadLockObject                tlock;
   ADMAudioProgramme::LIST         audioprogrammes;
@@ -627,6 +652,7 @@ protected:
   TRACKLIST                       tracklist;
   std::map<std::string,uint_t>    uniqueids;
   std::map<std::string,XMLValues> nonadmxml;
+  std::vector<std::string>        errors;
   bool                            puremode;
 
   static const std::string        tempidsuffix;

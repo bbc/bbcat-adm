@@ -29,7 +29,6 @@ const uint64_t ADMObject::MaxTime = (uint64_t)-1;
 ADMObject::ADMObject(ADMData& _owner, const std::string& _id, const std::string& _name) : owner(_owner),
                                                                                           id(_id),
                                                                                           name(_name),
-                                                                                          typeLabel((uint_t)TypeLabel_Unknown),
                                                                                           standarddef(false)
 {
   if (typeLabelMap.size() == 0)
@@ -98,6 +97,25 @@ void ADMObject::Register()
 }
 
 /*--------------------------------------------------------------------------------*/
+/** Log an error internally and output to global error system
+ */
+/*--------------------------------------------------------------------------------*/
+void ADMObject::LogError(const char *fmt, ...) const
+{
+  va_list ap;
+
+  va_start(ap, fmt);
+  LogErrorV(fmt, ap);
+  va_end(ap);
+}
+
+void ADMObject::LogErrorV(const char *fmt, va_list ap) const
+{
+  ADMData *adm = const_cast<ADMData *>(&owner);
+  if (adm) adm->LogErrorV(fmt, ap);
+}
+
+/*--------------------------------------------------------------------------------*/
 /** Set object typeLabel
  *
  * @param type typeLabel index
@@ -155,8 +173,8 @@ void ADMObject::SetTypeDefinition(const std::string& str)
 /*--------------------------------------------------------------------------------*/
 void ADMObject::SetTypeInfoInObject(ADMObject *obj) const
 {
-  // only update object if *not* in pure mode
-  if (!owner.InPureMode())
+  // only update object if *not* in pure mode and object is NOT a standard definition object
+  if (!owner.InPureMode() && !obj->IsStandardDefinition())
   {
     if (typeDefinition.IsSet())  obj->SetTypeDefinition(typeDefinition);
     if (typeLabel.IsSet())       obj->SetTypeLabel(typeLabel);
@@ -321,7 +339,7 @@ void ADMObject::SetReferences()
     {
       if (refrejected)
       {
-        BBCERROR("Reference %s as reference '%s' for %s REJECTED",
+        LogError("Reference %s as reference '%s' for %s REJECTED",
               obj->ToString().c_str(),
               value.value.c_str(),
               ToString().c_str());
@@ -336,7 +354,7 @@ void ADMObject::SetReferences()
     }
     else
     {
-      BBCERROR("Cannot find %s reference '%s' for %s",
+      LogError("Cannot find %s reference '%s' for %s",
             value.name.c_str(), value.value.c_str(),
             ToString().c_str());
     }
@@ -421,9 +439,9 @@ void ADMObject::CopyReferencesEx(std::vector<T *>& dst, const std::vector<T *>& 
           obj->AddBackReference(this);
         }
       }
-      else BBCERROR("Object '%s' is not of the correct type!", src[i]->ToString().c_str());
+      else LogError("Object '%s' is not of the correct type!", src[i]->ToString().c_str());
     }
-    else BBCERROR("Failed to find object '%s' is new ADM!", src[i]->ToString().c_str());
+    else LogError("Failed to find object '%s' is new ADM!", src[i]->ToString().c_str());
   }
 }
 
@@ -580,7 +598,7 @@ void ADMAudioProgramme::CopyReferences(const ADMObject *_obj)
   {
     CopyReferencesEx<>(contentrefs, obj->contentrefs);
   }
-  else BBCERROR("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
+  else LogError("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
 }
 
 /*----------------------------------------------------------------------------------------------------*/
@@ -691,7 +709,7 @@ void ADMAudioContent::CopyReferences(const ADMObject *_obj)
   {
     CopyReferencesEx<>(objectrefs, obj->objectrefs);
   }
-  else BBCERROR("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
+  else LogError("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
 }
 
 /*----------------------------------------------------------------------------------------------------*/
@@ -977,11 +995,11 @@ ADMAudioChannelFormat *ADMAudioObject::GetChannelFormat(uint_t track) const
             channelFormat = channelformatrefs[0];
             BBCDEBUG2(("Found %s<%s>: '%s' ('%s')", channelFormat->GetType().c_str(), StringFrom(channelFormat).c_str(), channelFormat->GetName().c_str(), channelFormat->GetID().c_str()));
           }
-          else BBCERROR("Incorrect channelformatrefs in '%s' (%u)!", streamformatrefs[0]->ToString().c_str(), (uint_t)channelformatrefs.size());
+          else LogError("Incorrect channelformatrefs in '%s' (%u)!", streamformatrefs[0]->ToString().c_str(), (uint_t)channelformatrefs.size());
         }
-        else BBCERROR("Incorrect streamformatrefs in '%s' (%u)!", trackformatrefs[0]->ToString().c_str(), (uint_t)streamformatrefs.size());
+        else LogError("Incorrect streamformatrefs in '%s' (%u)!", trackformatrefs[0]->ToString().c_str(), (uint_t)streamformatrefs.size());
       }
-      else BBCERROR("Incorrect trackformatrefs in '%s' (%u)!", audiotrack.ToString().c_str(), (uint_t)trackformatrefs.size());
+      else LogError("Incorrect trackformatrefs in '%s' (%u)!", audiotrack.ToString().c_str(), (uint_t)trackformatrefs.size());
       break;
     }
   }
@@ -1077,7 +1095,7 @@ void ADMAudioObject::CopyReferences(const ADMObject *_obj)
     CopyReferencesEx<>(packformatrefs, obj->packformatrefs);
     CopyReferencesEx<>(trackrefs, obj->trackrefs);
   }
-  else BBCERROR("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
+  else LogError("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
 }
 
 /*----------------------------------------------------------------------------------------------------*/
@@ -1179,7 +1197,7 @@ void ADMAudioTrack::CopyReferences(const ADMObject *_obj)
     CopyReferencesEx<>(trackformatrefs, obj->trackformatrefs);
     CopyReferencesEx<>(packformatrefs, obj->packformatrefs);
   }
-  else BBCERROR("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
+  else LogError("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
 }
 
 /*----------------------------------------------------------------------------------------------------*/
@@ -1214,13 +1232,20 @@ void ADMAudioPackFormat::SetValues()
 /*--------------------------------------------------------------------------------*/
 void ADMAudioPackFormat::UpdateID()
 {
-  // call SetID() with new ID
-  std::string _id;
+  if (!standarddef)
+  {
+    // call SetID() with new ID
+    std::string _id;
 
-  Printf(_id, "%04x%%04x", typeLabel.Get());
+    Printf(_id, "%04x%%04x", typeLabel.Get());
 
-  // custom pack formats start indexing at 0x1000
-  SetID(GetIDPrefix() + _id, 0x1000);
+    // custom pack formats start indexing at 0x1000
+    SetID(GetIDPrefix() + _id, 0x1000);
+  }
+  else
+  {
+    LogError("Cannot change ID of standard definitions object '%s'", ToString().c_str());
+  }
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -1302,7 +1327,7 @@ void ADMAudioPackFormat::CopyReferences(const ADMObject *_obj)
     CopyReferencesEx<>(channelformatrefs, obj->channelformatrefs);
     CopyReferencesEx<>(packformatrefs, obj->packformatrefs);
   }
-  else BBCERROR("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
+  else LogError("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
 }
 
 /*----------------------------------------------------------------------------------------------------*/
@@ -1341,23 +1366,30 @@ void ADMAudioStreamFormat::SetValues()
 /*--------------------------------------------------------------------------------*/
 void ADMAudioStreamFormat::UpdateID()
 {
-  // call SetID() with new ID
-  std::string _id;
-  uint_t i;
-
-  Printf(_id, "%04x%%04x", typeLabel.Get());
-
-  // custom stream formats start indexing at 0x1000
-  SetID(GetIDPrefix() + _id, 0x1000);
-
-  // set referenced trackformats' IDs
-
-  // form ID using streamformat's ID with track number suffixed
-  _id = "";
-  Printf(_id, "%s_%%02x", GetID().substr(GetIDPrefix().length()).c_str());
-  for (i = 0; i < trackformatrefs.size(); i++)
+  if (!standarddef)
   {
-    trackformatrefs[i]->SetID(trackformatrefs[i]->GetIDPrefix() + _id);
+    // call SetID() with new ID
+    std::string _id;
+    uint_t i;
+
+    Printf(_id, "%04x%%04x", typeLabel.Get());
+
+    // custom stream formats start indexing at 0x1000
+    SetID(GetIDPrefix() + _id, 0x1000);
+
+    // set referenced trackformats' IDs
+
+    // form ID using streamformat's ID with track number suffixed
+    _id = "";
+    Printf(_id, "%s_%%02x", GetID().substr(GetIDPrefix().length()).c_str());
+    for (i = 0; i < trackformatrefs.size(); i++)
+    {
+      trackformatrefs[i]->SetID(trackformatrefs[i]->GetIDPrefix() + _id);
+    }
+  }
+  else
+  {
+    LogError("Cannot change ID of standard definitions object '%s'", ToString().c_str());
   }
 }
 
@@ -1367,19 +1399,29 @@ void ADMAudioStreamFormat::UpdateID()
 /*--------------------------------------------------------------------------------*/
 bool ADMAudioStreamFormat::Add(ADMAudioChannelFormat *obj)
 {
-  if (channelformatrefs.size() == 0)
+  bool success = false;
+  
+  if (packformatrefs.size() == 0)
   {
-    SetTypeInfoInObject(obj);
-    channelformatrefs.push_back(obj);
-    obj->AddBackReference(this);
-    return true;
+    if (channelformatrefs.size() == 0)
+    {
+      SetTypeInfoInObject(obj);
+      channelformatrefs.push_back(obj);
+      obj->AddBackReference(this);
+      success = true;
+    }
+    else
+    {
+      // only a single reference allowed -> overwrite existing
+      channelformatrefs[0]->RemoveBackReference(this);  // remove reference back from current value before overwriting
+      channelformatrefs[0] = obj;
+      obj->AddBackReference(this);
+      success = true;
+    }
   }
+  else LogError("Cannot add audioChannelFormat reference '%s' to audioStreamFormat '%s' when it references an audioPackFormat", obj->ToString().c_str(), ToString().c_str());
 
-  // only a single reference allowed -> overwrite existing
-  channelformatrefs[0]->RemoveBackReference(this);  // remove reference back from current value before overwriting
-  channelformatrefs[0] = obj;
-  obj->AddBackReference(this);
-  return true;
+  return success;
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -1406,19 +1448,29 @@ bool ADMAudioStreamFormat::Add(ADMAudioTrackFormat *obj)
 /*--------------------------------------------------------------------------------*/
 bool ADMAudioStreamFormat::Add(ADMAudioPackFormat *obj)
 {
+  bool success = false;
+  
   if (packformatrefs.size() == 0)
   {
-    SetTypeInfoInObject(obj);
-    packformatrefs.push_back(obj);
-    obj->AddBackReference(this);
-    return true;
+    if (packformatrefs.size() == 0)
+    {
+      SetTypeInfoInObject(obj);
+      packformatrefs.push_back(obj);
+      obj->AddBackReference(this);
+      success = true;
+    }
+    else
+    {
+      // only a single reference allowed -> overwrite existing
+      packformatrefs[0]->RemoveBackReference(this);  // remove reference back from current value before overwriting
+      packformatrefs[0] = obj;
+      obj->AddBackReference(this);
+      success = true;
+    }
   }
+  else LogError("Cannot add audioPackFormat reference '%s' to audioStreamFormat '%s' when it references an audioChannelFormat", obj->ToString().c_str(), ToString().c_str());
 
-  // only a single reference allowed -> overwrite existing
-  packformatrefs[0]->RemoveBackReference(this);  // remove reference back from current value before overwriting
-  packformatrefs[0] = obj;
-  obj->AddBackReference(this);
-  return true;
+  return success;
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -1491,7 +1543,7 @@ void ADMAudioStreamFormat::CopyReferences(const ADMObject *_obj)
     CopyReferencesEx<>(packformatrefs, obj->packformatrefs);
     CopyReferencesEx<>(trackformatrefs, obj->trackformatrefs);
   }
-  else BBCERROR("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
+  else LogError("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
 }
 
 /*----------------------------------------------------------------------------------------------------*/
@@ -1528,18 +1580,25 @@ void ADMAudioTrackFormat::SetValues()
 /*--------------------------------------------------------------------------------*/
 void ADMAudioTrackFormat::UpdateID()
 {
-  // ONLY update this trackformat's ID if there are no streamformat references
-  // (otherwise the streamformat will sort this trackformat out)
-
-  if (!streamformatrefs.size())
+  if (!standarddef)
   {
-    // call SetID() with new ID
-    std::string _id;
+    // ONLY update this trackformat's ID if there are no streamformat references
+    // (otherwise the streamformat will sort this trackformat out)
 
-    Printf(_id, "%04x1000_%%02x", typeLabel.Get());
+    if (!streamformatrefs.size())
+    {
+      // call SetID() with new ID
+      std::string _id;
 
-    // custom track formats start indexing at 0x1000
-    SetID(GetIDPrefix() + _id);
+      Printf(_id, "%04x1000_%%02x", typeLabel.Get());
+
+      // custom track formats start indexing at 0x1000
+      SetID(GetIDPrefix() + _id);
+    }
+  }
+  else
+  {
+    LogError("Cannot change ID of standard definitions object '%s'", ToString().c_str());
   }
 }
 
@@ -1614,7 +1673,7 @@ void ADMAudioTrackFormat::CopyReferences(const ADMObject *_obj)
   {
     CopyReferencesEx<>(streamformatrefs, obj->streamformatrefs);
   }
-  else BBCERROR("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
+  else LogError("Cannot copy references from '%s', type is '%s' not '%s'", _obj->ToString().c_str(), _obj->GetType().c_str(), GetType().c_str());
 }
 
 /*----------------------------------------------------------------------------------------------------*/
@@ -1699,13 +1758,20 @@ void ADMAudioChannelFormat::SetValues()
 /*--------------------------------------------------------------------------------*/
 void ADMAudioChannelFormat::UpdateID()
 {
-  // call SetID() with new ID
-  std::string _id;
+  if (!standarddef)
+  {
+    // call SetID() with new ID
+    std::string _id;
 
-  Printf(_id, "%04x%%04x", typeLabel.Get());
+    Printf(_id, "%04x%%04x", typeLabel.Get());
 
-  // custom channel formats start indexing at 0x1000
-  SetID(GetIDPrefix() + _id, 0x1000);
+    // custom channel formats start indexing at 0x1000
+    SetID(GetIDPrefix() + _id, 0x1000);
+  }
+  else
+  {
+    LogError("Cannot change ID of standard definitions object '%s'", ToString().c_str());
+  }
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -1936,7 +2002,7 @@ ADMAudioBlockFormat::ADMAudioBlockFormat(const ADMAudioBlockFormat *obj) :
 /** Set internal variables from values added to internal list (e.g. from XML)
  */
 /*--------------------------------------------------------------------------------*/
-void ADMAudioBlockFormat::SetValues(XMLValues& values)
+void ADMAudioBlockFormat::SetValues(XMLValues& values, ADMObject *owner)
 {
   XMLValues::iterator it;
   ParameterSet othervalues;
@@ -1961,7 +2027,7 @@ void ADMAudioBlockFormat::SetValues(XMLValues& values)
       objparameters.SetInterpolationTime(_time);
     }
   }
-  else BBCERROR("No attributes for audioBlockFormat!");
+  else owner->LogError("No attributes for audioBlockFormat!");
 
   for (it = values.begin(); it != values.end();)
   {
@@ -2003,7 +2069,7 @@ void ADMAudioBlockFormat::SetValues(XMLValues& values)
             pos = &maxposition;
             set = &maxpositionset;
           }
-          else BBCERROR("Illegal bound value '%s' for position", bound->c_str());
+          else owner->LogError("Illegal bound value '%s' for position", bound->c_str());
         }
 
         scrlock = value.GetAttribute("screenEdgeLock");
@@ -2019,10 +2085,10 @@ void ADMAudioBlockFormat::SetValues(XMLValues& values)
           else if ((!*set || !pos->polar) && ((*coord == "x") || (*coord == "X"))) {*set = true; pos->polar = false; pos->pos.x  = val;}
           else if ((!*set || !pos->polar) && ((*coord == "y") || (*coord == "Y"))) {*set = true; pos->polar = false; pos->pos.y  = val;}
           else if ((!*set || !pos->polar) && ((*coord == "z") || (*coord == "Z"))) {*set = true; pos->polar = false; pos->pos.z  = val;}
-          else BBCERROR("Illegal co-ordinate '%s' specified (bound '%s', co-ordinate system '%s')", coord->c_str(), bound ? bound->c_str() : "", pos->polar ? "spherical" : "cartesian");
+          else owner->LogError("Illegal co-ordinate '%s' specified (bound '%s', co-ordinate system '%s')", coord->c_str(), bound ? bound->c_str() : "", pos->polar ? "spherical" : "cartesian");
         }
       }
-      else BBCERROR("Failed to evaluate '%s' as floating point number for position", value.value.c_str());
+      else owner->LogError("Failed to evaluate '%s' as floating point number for position", value.value.c_str());
 
       it = values.erase(it);
     }
@@ -2168,7 +2234,7 @@ void ADMAudioBlockFormat::SetValues(XMLValues& values)
               // add zone to list in object parameters
               objparameters.AddExcludedZone(value2.value, minx, miny, minz, maxx, maxy, maxz);
             }
-            else BBCERROR("Sub-value %u of zoneExclusion invalid", i);
+            else owner->LogError("Sub-value %u of zoneExclusion invalid", i);
           }
           else BBCDEBUG1(("Unrecognized sub-value %u ('%s') of zoneExclusion", i, value2.name.c_str()));
         }

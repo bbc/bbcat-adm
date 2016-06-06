@@ -1,4 +1,5 @@
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,6 +27,31 @@ ADMData::ADMData(const ADMData& obj) : puremode(defaultpuremode)
 ADMData::~ADMData()
 {
   Delete();
+}
+
+/*--------------------------------------------------------------------------------*/
+/** Log an error internally and output to global error system
+ */
+/*--------------------------------------------------------------------------------*/
+void ADMData::LogError(const char *fmt, ...)
+{
+  va_list ap;
+
+  va_start(ap, fmt);
+  LogErrorV(fmt, ap);
+  va_end(ap);
+}
+
+void ADMData::LogErrorV(const char *fmt, va_list ap)
+{
+  std::string str;
+
+  VPrintf(str, fmt, ap);
+
+  errors.push_back(str);
+
+  // push out to normal error reporting system
+  BBCERROR("%s", str.c_str());
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -76,7 +102,7 @@ void ADMData::Copy(const ADMData& obj)
       // duplicate references from original object (requires all objects to exist in new list)
       it2->second->CopyReferences(it->second);
     }
-    else BBCERROR("Failed to find copied object '%s' in new list", it->first.c_str());
+    else LogError("Failed to find copied object '%s' in new list", it->first.c_str());
   }
 }
 
@@ -105,6 +131,8 @@ void ADMData::Delete()
 
     delete obj;
   }
+
+  ResetErrors();
 }
 
 /*--------------------------------------------------------------------------------*/
@@ -278,7 +306,7 @@ ADMObject *ADMData::Create(const std::string& type, const std::string& id, const
       }
       else
       {
-        BBCERROR("Cannot create type '%s'", type.c_str());
+        LogError("Cannot create type '%s'", type.c_str());
       }
     }
     // return existing object
@@ -1402,11 +1430,11 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
   {
     if ((names.objects.programme = CreateProgramme(names.programmeName)) != NULL)
     {
-      BBCDEBUG2(("Created programme '%s'", names.programmeName.c_str()));
+      BBCDEBUG2(("Created programme '%s'", names.objects.programme->ToString().c_str()));
     }
     else
     {
-      BBCERROR("Failed to create programme '%s'", names.programmeName.c_str());
+      LogError("Failed to create programme '%s'", names.programmeName.c_str());
       success = false;
     }
   }
@@ -1415,11 +1443,11 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
   {
     if ((names.objects.content = CreateContent(names.contentName)) != NULL)
     {
-      BBCDEBUG2(("Created content '%s'", names.contentName.c_str()));
+      BBCDEBUG2(("Created content '%s'", names.objects.content->ToString().c_str()));
     }
     else
     {
-      BBCERROR("Failed to create content '%s'", names.contentName.c_str());
+      LogError("Failed to create content '%s'", names.contentName.c_str());
       success = false;
     }
   }
@@ -1428,11 +1456,11 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
   {
     if ((names.objects.object = CreateObject(names.objectName)) != NULL)
     {
-      BBCDEBUG2(("Created object '%s'", names.objectName.c_str()));
+      BBCDEBUG2(("Created object '%s'", names.objects.object->ToString().c_str()));
     }
     else
     {
-      BBCERROR("Failed to create object '%s'", names.objectName.c_str());
+      LogError("Failed to create object '%s'", names.objectName.c_str());
       success = false;
     }
   }
@@ -1441,11 +1469,11 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
   {
     if ((names.objects.packFormat = CreatePackFormat(names.packFormatName)) != NULL)
     {
-      BBCDEBUG2(("Created pack format '%s'", names.packFormatName.c_str()));
+      BBCDEBUG2(("Created pack format '%s'", names.objects.packFormat->ToString().c_str()));
     }
     else
     {
-      BBCERROR("Failed to create packFormat '%s'", names.packFormatName.c_str());
+      LogError("Failed to create packFormat '%s'", names.packFormatName.c_str());
       success = false;
     }
   }
@@ -1454,11 +1482,11 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
   {
     if ((names.objects.channelFormat = CreateChannelFormat(names.channelFormatName)) != NULL)
     {
-      BBCDEBUG2(("Created channel format '%s'", names.channelFormatName.c_str()));
+      BBCDEBUG2(("Created channel format '%s'", names.objects.channelFormat->ToString().c_str()));
     }
     else
     {
-      BBCERROR("Failed to create channelFormat '%s'", names.channelFormatName.c_str());
+      LogError("Failed to create channelFormat '%s'", names.channelFormatName.c_str());
       success = false;
     }
   }
@@ -1468,13 +1496,13 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
     if ((names.objects.streamFormat = CreateStreamFormat(names.streamFormatName)) != NULL)
     {
       // set stream type (PCM)
-      BBCDEBUG2(("Created stream format '%s'", names.streamFormatName.c_str()));
+      BBCDEBUG2(("Created stream format '%s'", names.objects.streamFormat->ToString().c_str()));
       names.objects.streamFormat->SetFormatLabel(1);
       names.objects.streamFormat->SetFormatDefinition("PCM");
     }
     else
     {
-      BBCERROR("Failed to create streamFormat '%s'", names.streamFormatName.c_str());
+      LogError("Failed to create streamFormat '%s'", names.streamFormatName.c_str());
       success = false;
     }
   }
@@ -1484,13 +1512,13 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
     if ((names.objects.trackFormat = CreateTrackFormat(names.trackFormatName)) != NULL)
     {
       // set track type (PCM)
-      BBCDEBUG2(("Created track format '%s'", names.trackFormatName.c_str()));
+      BBCDEBUG2(("Created track format '%s'", names.objects.trackFormat->ToString().c_str()));
       names.objects.trackFormat->SetFormatLabel(1);
       names.objects.trackFormat->SetFormatDefinition("PCM");
     }
     else
     {
-      BBCERROR("Failed to create trackFormat '%s'", names.trackFormatName.c_str());
+      LogError("Failed to create trackFormat '%s'", names.trackFormatName.c_str());
       success = false;
     }
   }
@@ -1503,38 +1531,36 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
     }
     else
     {
-      BBCERROR("Failed to find track number %u (%u tracks)", names.trackNumber, (uint_t)tracklist.size());
+      LogError("Failed to find track number %u (%u tracks)", names.trackNumber, (uint_t)tracklist.size());
     }
   }
 
-#define LINK(master,slave)                                  \
-  if (names.objects.master && names.objects.slave)          \
-  {                                                         \
-    if (names.objects.master->Add(names.objects.slave))     \
-    {                                                       \
-      BBCDEBUG2(("Connected %s '%s' to %s '%s'",               \
-              names.objects.slave->GetType().c_str(),       \
-              names.objects.slave->GetName().c_str(),       \
-              names.objects.master->GetType().c_str(),      \
-              names.objects.master->GetName().c_str()));    \
-    }                                                       \
-    else                                                    \
-    {                                                       \
-      BBCERROR("Failed to connect %s '%s' to %s '%s'",         \
-            names.objects.slave->GetType().c_str(),         \
-            names.objects.slave->GetName().c_str(),         \
-            names.objects.master->GetType().c_str(),        \
-            names.objects.master->GetName().c_str());       \
-      success = false;                                      \
-    }                                                       \
+#define LINK(master,slave)                                      \
+  if (names.objects.master && names.objects.slave)              \
+  {                                                             \
+    if (names.objects.master->Add(names.objects.slave))         \
+    {                                                           \
+      BBCDEBUG2(("Connected '%s'<%s> to '%s'<%s>",              \
+                 names.objects.slave->ToString().c_str(),       \
+                 StringFrom(names.objects.slave).c_str(),       \
+                 names.objects.master->ToString().c_str(),      \
+                 StringFrom(names.objects.master).c_str()));    \
+    }                                                           \
+    else                                                        \
+    {                                                           \
+      LogError("Failed to connect '%s' to '%s'",                \
+               names.objects.slave->ToString().c_str(),         \
+               names.objects.master->ToString().c_str());       \
+      success = false;                                          \
+    }                                                           \
   }
 
   // link objects
   LINK(packFormat, channelFormat);
   LINK(trackFormat, streamFormat);
   LINK(streamFormat, trackFormat);
-  LINK(streamFormat, packFormat);
   LINK(streamFormat, channelFormat);
+  LINK(streamFormat, packFormat);
   LINK(audioTrack, trackFormat);
   LINK(audioTrack, packFormat);
 
@@ -1553,7 +1579,7 @@ bool ADMData::CreateObjects(OBJECTNAMES& names)
   {
   // set typeLabel for objects that have not had their typeLabel set
 #define SETTYPELABEL(obj) \
-    if (names.objects.obj && (names.objects.obj->GetTypeLabel() == ADMObject::TypeLabel_Unknown)) names.objects.obj->SetTypeLabel(names.typeLabel);
+    if (names.objects.obj && (names.objects.obj->GetTypeLabel() == ADMObject::TypeLabel_Unknown) && !names.objects.obj->IsStandardDefinition()) names.objects.obj->SetTypeLabel(names.typeLabel);
     SETTYPELABEL(packFormat);
     SETTYPELABEL(trackFormat);
     SETTYPELABEL(streamFormat);
@@ -1647,19 +1673,19 @@ bool ADMData::CreateFromFile(const char *filename)
             }
             else
             {
-              BBCERROR("Failed to decode <tr>:<trackname>:<objectname> line");
+              LogError("Failed to decode <tr>:<trackname>:<objectname> line");
               success = false;
             }
           }
           else
           {
-            BBCERROR("Track %u out of range 1-%u", tr, (uint_t)tracklist.size());
+            LogError("Track %u out of range 1-%u", tr, (uint_t)tracklist.size());
             success = false;
           }
         }
         else
         {
-          BBCERROR("Failed to extract track number from '%s'", line);
+          LogError("Failed to extract track number from '%s'", line);
           success = false;
         }
       }

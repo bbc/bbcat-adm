@@ -287,7 +287,7 @@ public:
    */
   /*--------------------------------------------------------------------------------*/
   XMLValues& GetExtraValuesWritable() {return values;}
-
+  
   enum {
     TypeLabel_Unknown = 0,
     TypeLabel_DirectSpeakers,
@@ -298,6 +298,13 @@ public:
 
     TypeLabel_Custom = 0x1000,
   };
+
+  /*--------------------------------------------------------------------------------*/
+  /** Log an error internally and output to global error system
+   */
+  /*--------------------------------------------------------------------------------*/
+  void LogError(const char *fmt, ...) const;
+  void LogErrorV(const char *fmt, va_list ap) const;
 
   // absolute maximum time
   static const uint64_t MaxTime;
@@ -2010,7 +2017,7 @@ public:
   /** Set internal variables from values added to internal list (e.g. from XML)
    */
   /*--------------------------------------------------------------------------------*/
-  void SetValues(XMLValues& values);
+  void SetValues(XMLValues& values, ADMObject *owner);
 
   /*--------------------------------------------------------------------------------*/
   /** Set and Get rtime
