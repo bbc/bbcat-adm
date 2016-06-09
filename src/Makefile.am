@@ -32,7 +32,8 @@ pkginclude_HEADERS =							\
 	ADMXMLGenerator.h							\
 	AudioObjectCursor.h							\
 	AudioObjectParameters.h						\
-	XMLValue.h
+	XMLValue.h									\
+	register.h
 
 #CLEANFILES = register.cpp
 
