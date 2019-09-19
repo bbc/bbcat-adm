@@ -1,6 +1,8 @@
 # This library is deprecated!
 # Please use [libadm](https://github.com/IRT-Open-Source/libadm) in any future implementations.
 
+Additionally, you may be interested in [libear](https://github.com/ebu/libear) for ADM rendering, and [libbw64](https://github.com/IRT-Open-Source/libbw64) for handling BW64 files - a file format which supports ADM.
+
 --------------------------------------------------------------------------------
 ## Purpose
 
