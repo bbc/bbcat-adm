@@ -1,15 +1,19 @@
-Purpose
+# This library is deprecated!
+# Please use [libadm](https://github.com/IRT-Open-Source/libadm) in any future implementations.
+
+--------------------------------------------------------------------------------
+##Purpose
 
 Audio Definition Model handling library
 
-Dependencies
+##Dependencies
 
 bbcat-base - git@git0.rd.bbc.co.uk:aplibs/bbcat-base.git
 bbcat-dsp - git@git0.rd.bbc.co.uk:aplibs/bbcat-dsp.git
 jsoncpp - https://github.com/open-source-parsers/jsoncpp
 
-Files
-
+##Files
+```
 autogen.sh - simple autotools script
 configure.ac - configure configuration for autotools
 CMakeLists.txt - CMake configuration
@@ -38,7 +42,7 @@ src/Makefile.am                         | Makefile for automake
 src/ADMXMLGenerator.cpp					| A simple XML generator for ADM data
 src/ADMXMLGenerator.h					|
 
-src/AudioObjectCursor.h                 | A cursor that tracks channel parameter changes over time 
+src/AudioObjectCursor.h                 | A cursor that tracks channel parameter changes over time
 
 src/AudioObjectParameters.cpp           | A set of parameters describing a channel's audio attributes (such as position, size, diffuseness, gain and importance)
 src/AudioObjectParameters.h             |
@@ -47,9 +51,9 @@ src/XMLValue.cpp						| A simple XML value/attribute/value with attribute class
 src/XMLValue.h							|
 
 src/register.cpp						| Registration function (see below)
-
+```
 --------------------------------------------------------------------------------
-Initialising the Library (IMPORTANT!)
+##Initialising the Library (IMPORTANT!)
 
 Compilers are clever and try to remove unused code whilst linking applications.
 However, sometimes they are too clever and remove some code that *appears* not
@@ -65,6 +69,7 @@ For this to work, any application *must* call the registration function of most
 dependant library it uses.
 
 For example, for an application using only this library:
+```
 #include <bbcat-adm/register.h>
 
 using namespace bbcat;
@@ -74,6 +79,7 @@ int main(int argc, char *argv[])
   // ensure libraries are set up
   bbcat_register_bbcat_adm();
 }
+```
 
 register.cpp is included in repo but will be updated by the script
 bbcat-common/findregisterfunctions.sh if autotools is used.  The CMake process
@@ -88,12 +94,13 @@ Follow the installation instructions for bbcat-base (https://github.com/bbcrd/bb
 Use git-bash to change to the directory where the libraries are to be cloned to
 
 Clone source code, if necessary:
-git clone git@github.com:bbcrd/bbcat-adm.git
-
+`git clone git@github.com:bbcrd/bbcat-adm.git`
+```
 cd bbcat-adm
 mkdir build
 cd build
 cmake -G "Visual Studio 14 2015 Win64" .. && cmake --build . --target INSTALL --config Release
+```
 (or whatever version of Visual Studio you are using)
 
 Notes on Windows builds
@@ -104,28 +111,30 @@ As there is no standardised directories for cmake files, libraries, etc. the bui
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
-Building on Mac and Linux
+##Building on Mac and Linux
 
 There are two build mechanisms supported: autotools and cmake
 
 autotools:
-./autogen.sh && configure && make && sudo make install
+`./autogen.sh && configure && make && sudo make install`
 
 cmake:
-mkdir build ; cd build ; cmake .. && make && sudo make install
+`mkdir build ; cd build ; cmake .. && make && sudo make install`
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
-Building without cmake or autotools
+##Building without cmake or autotools
 
 Using the libraries with other build environments is possible, simply throw the
 files into the build environment BUT certain defines must be set to enable
 features.
 
 bbcat-adm uses the following defines:
+```
 ENABLE_JSON=1 		 - enables json support
 OLD_JSON_CPP  		 - define if old version of jsoncpp (version 0.6.0, for example) used
 _FILE_OFFSET_BITS=64 - enable 64-bit file operations
 INSTALL_PREFIX=...   - locations of installation (e.g. /usr/local, c:/local, etc)
 USE_PTHREADS         - define if using pthreads rather than std::thread
+```
 --------------------------------------------------------------------------------
