@@ -2,17 +2,19 @@
 # Please use [libadm](https://github.com/IRT-Open-Source/libadm) in any future implementations.
 
 --------------------------------------------------------------------------------
-##Purpose
+## Purpose
 
 Audio Definition Model handling library
 
-##Dependencies
+## Dependencies
 
-bbcat-base - git@git0.rd.bbc.co.uk:aplibs/bbcat-base.git
-bbcat-dsp - git@git0.rd.bbc.co.uk:aplibs/bbcat-dsp.git
+bbcat-base - `git@git0.rd.bbc.co.uk:aplibs/bbcat-base.git`
+
+bbcat-dsp - `git@git0.rd.bbc.co.uk:aplibs/bbcat-dsp.git`
+
 jsoncpp - https://github.com/open-source-parsers/jsoncpp
 
-##Files
+## Files
 ```
 autogen.sh - simple autotools script
 configure.ac - configure configuration for autotools
@@ -35,25 +37,25 @@ src/ADMObjects.h                        |
 src/ADMSubObjects.cpp                   | Objects representing complex ADM elements
 src/ADMSubObjects.h                     |
 
-src/CMakeLists.txt						| CMake configuration for source files
+src/CMakeLists.txt                      | CMake configuration for source files
 
 src/Makefile.am                         | Makefile for automake
 
-src/ADMXMLGenerator.cpp					| A simple XML generator for ADM data
-src/ADMXMLGenerator.h					|
+src/ADMXMLGenerator.cpp                 | A simple XML generator for ADM data
+src/ADMXMLGenerator.h                   |
 
 src/AudioObjectCursor.h                 | A cursor that tracks channel parameter changes over time
 
 src/AudioObjectParameters.cpp           | A set of parameters describing a channel's audio attributes (such as position, size, diffuseness, gain and importance)
 src/AudioObjectParameters.h             |
 
-src/XMLValue.cpp						| A simple XML value/attribute/value with attribute class
-src/XMLValue.h							|
+src/XMLValue.cpp                        | A simple XML value/attribute/value with attribute class
+src/XMLValue.h                          |
 
-src/register.cpp						| Registration function (see below)
+src/register.cpp                        | Registration function (see below)
 ```
 --------------------------------------------------------------------------------
-##Initialising the Library (IMPORTANT!)
+## Initialising the Library (IMPORTANT!)
 
 Compilers are clever and try to remove unused code whilst linking applications.
 However, sometimes they are too clever and remove some code that *appears* not
@@ -87,7 +89,8 @@ is also capable of autogenerating this file if the original in the source
 directory does not exist.
 
 --------------------------------------------------------------------------------
-Building on Windows (Visual Studio)
+
+## Building on Windows (Visual Studio)
 
 Follow the installation instructions for bbcat-base (https://github.com/bbcrd/bbcat-base)
 
@@ -108,21 +111,23 @@ Notes on Windows builds
 As there is no standardised directories for cmake files, libraries, etc. the build *assumes* that:
 1. Library includes, libs and shared files will be stored in c:\local\bbcat
 2. CMake configuration files will be stored in c:\local\cmake
---------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
-##Building on Mac and Linux
+
+## Building on Mac and Linux
 
 There are two build mechanisms supported: autotools and cmake
 
 autotools:
+
 `./autogen.sh && configure && make && sudo make install`
 
 cmake:
+
 `mkdir build ; cd build ; cmake .. && make && sudo make install`
---------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
+
 ##Building without cmake or autotools
 
 Using the libraries with other build environments is possible, simply throw the
